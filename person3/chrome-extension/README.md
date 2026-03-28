@@ -12,7 +12,7 @@ Polymarket × Twitter. Bet on live markets while doomscrolling.
 4. Select this folder: `person3/chrome-extension/`
 5. Open [twitter.com](https://twitter.com) or [x.com](https://x.com)
 
-Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar, the Ditto button floating bottom-right, and market pills injected under tweets about GPT-5, TikTok, Bitcoin, Tesla, or the Fed.
+Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar, the Ditto button floating bottom-right, and market action pills injected under tweets that match existing markets.
 
 ---
 
@@ -26,8 +26,8 @@ chrome-extension/
 ├── src/
 │   ├── styles/main.css        # ALL styling — Polymarket design system
 │   ├── content/
-│   │   ├── data.js            # ← HARDCODED DATA (swap for live APIs here)
-│   │   └── inject.js          # Tweet detector + DOM injection
+│   │   ├── data.js            # Live Polymarket fetch + offline matcher
+│   │   └── inject.js          # Tweet detector + DOM injection + Research button
 │   └── sidebar/
 │       └── sidebar.js         # Sidebar renderer (Portfolio / Markets / Saved)
 ```
@@ -36,13 +36,16 @@ chrome-extension/
 
 ## Integration Guide for Teammates
 
-All hardcoded data lives in **`src/content/data.js`**. Each constant maps 1:1 to a live data source.
+Live market matching lives in **`src/content/data.js`**:
+- `loadPolymarketMarketUniverse()` fetches active markets from `gamma-api.polymarket.com`.
+- `findBestMarketForTweet(tweetText)` scores each tweet against the live market universe (no AWS).
+- `buildResearchSummary(...)` feeds the Research card in the sidebar.
 
 ### `MOCK_MARKETS` → Polymarket API
 ```js
-// Replace with: GET https://gamma-api.polymarket.com/markets
-// Each market needs: id, question, yesOdds, noOdds, volume, keywords[]
-// keywords[] is what gets matched against tweet text — your NLP layer feeds this
+// Fallback only (used if live fetch fails)
+// Primary source is live fetch from:
+// GET https://gamma-api.polymarket.com/markets?active=true&closed=false
 ```
 
 ### `MOCK_AGENTS` → AI Swarm Agent outputs
@@ -92,15 +95,15 @@ All hardcoded data lives in **`src/content/data.js`**. Each constant maps 1:1 to
 // v1: hardcoded | v2: real matching from InstaMarket user database
 ```
 
-### Tweet keyword matching
-In `inject.js`, `findMarketForTweet(text)` does naive keyword matching.
-Replace with your NLP/embedding similarity layer:
-```js
-function findMarketForTweet(tweetText) {
-  // YOUR CODE: call your market-matching API
-  // return a market object or null
-}
-```
+### Tweet-to-market matching (no API credits)
+The extension now uses an offline text parser in `src/content/data.js`:
+- `findBestMarketForTweet(tweetText)` scores every market using phrase + token overlap.
+- `buildResearchSummary(tweetText, match)` builds parser reasoning for the sidebar.
+- `inject.js` adds a `Research` button next to YES/NO/Save and opens parser research in the Markets tab.
+
+No Bedrock calls are required for this matching flow.
+
+If you update `manifest.json` host permissions, reload the extension in `chrome://extensions`.
 
 ### Payoff curve chart
 `PAYOFF_CURVE_DATA` in `data.js` — replace with real payoff calculation:

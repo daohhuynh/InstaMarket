@@ -2,6 +2,17 @@
 // SIDEBAR — renders the full InstaMarket right sidebar
 // ============================================================
 
+const IM_MARKET_RESEARCH = {};
+
+function setMarketResearch(marketId, research) {
+  if (!marketId || !research) return;
+  IM_MARKET_RESEARCH[marketId] = research;
+}
+
+function getMarketResearch(marketId) {
+  return IM_MARKET_RESEARCH[marketId];
+}
+
 function createSidebar() {
   const existing = document.getElementById('im-sidebar');
   if (existing) return;
@@ -103,14 +114,19 @@ function renderPortfolioTab() {
 }
 
 function renderMarketsTab(activeMarketId) {
-  const primary = MOCK_MARKETS.find(m => m.id === (activeMarketId || 'm1')) || MOCK_MARKETS[0];
-  const related = primary.relatedMarkets.map(id => MOCK_MARKETS.find(m => m.id === id)).filter(Boolean);
+  const markets = getRenderableMarkets();
+  const primary = resolvePrimaryMarket(markets, activeMarketId);
+  const related = buildRelatedMarkets(primary, markets);
+  const research = getMarketResearch(primary.id);
 
   return `
     ${renderMarketCard(primary, true)}
 
     <div class="im-section-header">Related Markets</div>
     ${related.map(m => renderMarketCard(m, false)).join('')}
+
+    <div class="im-section-header">Research</div>
+    ${research ? renderResearchCard(research) : renderResearchPlaceholder(primary)}
 
     <div class="im-section-header">AI Agent Analysis</div>
     ${MOCK_AGENTS.map(a => renderAgentCard(a)).join('')}
@@ -133,13 +149,117 @@ function renderMarketsTab(activeMarketId) {
   `;
 }
 
+function getRenderableMarkets() {
+  if (typeof getMarketUniverse === "function") {
+    const liveMarkets = getMarketUniverse();
+    if (Array.isArray(liveMarkets) && liveMarkets.length > 0) {
+      return liveMarkets;
+    }
+  }
+  return MOCK_MARKETS;
+}
+
+function resolvePrimaryMarket(markets, activeMarketId) {
+  if (activeMarketId && typeof getMarketById === "function") {
+    const direct = getMarketById(activeMarketId);
+    if (direct) return direct;
+  }
+
+  return markets.find(m => m.id === (activeMarketId || 'm1')) || markets[0];
+}
+
+function buildRelatedMarkets(primary, markets) {
+  if (!primary) return [];
+  if (Array.isArray(primary.relatedMarkets) && primary.relatedMarkets.length > 0) {
+    const byId = new Map(markets.map(market => [String(market.id), market]));
+    return primary.relatedMarkets
+      .map(id => byId.get(String(id)))
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  const sameCategory = markets.filter(m => m.id !== primary.id && m.category && primary.category && m.category === primary.category);
+  if (sameCategory.length > 0) {
+    return sameCategory.slice(0, 4);
+  }
+
+  const lexicallyRelated = markets
+    .filter(m => m.id !== primary.id)
+    .map(market => ({ market, score: lexicalOverlap(primary.question, market.question) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(item => item.market);
+
+  return lexicallyRelated;
+}
+
+function lexicalOverlap(a, b) {
+  if (typeof tokenizeForMatch !== "function") return 0;
+  const left = new Set(tokenizeForMatch(a));
+  const right = new Set(tokenizeForMatch(b));
+  let overlap = 0;
+  for (const token of left) {
+    if (right.has(token)) overlap += 1;
+  }
+  return overlap;
+}
+
+function renderResearchCard(research) {
+  const terms = Array.isArray(research.matchedTerms) ? research.matchedTerms : [];
+  const steps = Array.isArray(research.steps) ? research.steps : [];
+  const confidence = Number.isFinite(research.confidence) ? research.confidence : 0;
+
+  return `
+    <div class="im-risk-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div class="im-market-title">${research.title || "Parser research"}</div>
+        <div style="font-size:11px;color:var(--pm-blue);font-weight:700;">${confidence}% confidence</div>
+      </div>
+      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
+        ${research.summary || "No summary available."}
+      </div>
+      ${terms.length ? `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${terms.map(term => `<span class="im-best-match-badge" style="border-color:var(--pm-blue);color:var(--pm-blue);background:rgba(59,130,246,0.12);">${term}</span>`).join("")}
+        </div>
+      ` : ""}
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${steps.map((step, index) => `
+          <div class="im-reasoning-step" style="border-bottom:none;padding:0;">
+            <span class="step-num">${index + 1}.</span>
+            <span>${step}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderResearchPlaceholder(primaryMarket) {
+  return `
+    <div class="im-risk-panel">
+      <div class="im-market-title">No research yet</div>
+      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
+        Click <strong>Research</strong> on a tweet that matches "${primaryMarket.question}" to generate parser-based reasoning.
+      </div>
+    </div>
+  `;
+}
+
 function renderMarketCard(market, isBest) {
+  const marketLink = market.polymarketUrl
+    ? `<a href="${market.polymarketUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
+    : "";
+
   return `
     <div class="im-market-card ${isBest ? 'best-match' : ''}">
       ${isBest ? '<div class="im-best-match-badge">⭐ Best Match</div>' : ''}
       <div class="im-market-title">${market.question}</div>
       <div class="im-market-meta">
         <span>${market.volume}</span>
+        ${market.category ? `<span>· ${market.category}</span>` : ""}
+        ${marketLink}
       </div>
       <div class="im-market-odds-row">
         <div class="im-yes-bar-wrap" data-market="${market.id}" data-side="YES">
@@ -402,3 +522,5 @@ function switchSidebarToMarkets(marketId) {
     marketsContent.innerHTML = renderMarketsTab(marketId);
   }
 }
+
+window.setMarketResearch = setMarketResearch;

@@ -8,9 +8,10 @@
   let sidebarMounted = false;
 
   // ── Wait for DOM ready ──────────────────────────────────
-  function init() {
+  async function init() {
     mountSidebar();
     mountDittoButton();
+    await hydrateMarketUniverse();
     observeTweets();
   }
 
@@ -87,15 +88,19 @@
   function injectTweetLayer(tweet) {
     tweet.setAttribute('data-im-injected', 'true');
 
-    const tweetText = tweet.innerText.toLowerCase();
-    const market = findMarketForTweet(tweetText);
-    if (!market) return;
+    const tweetText = tweet.innerText;
+    const match = findBestMarketForTweet(tweetText);
+    if (!match) return;
+    const market = match.market;
+    const researchSummary = buildResearchSummary(tweetText, match);
+    persistResearch(market.id, researchSummary);
 
     const layer = document.createElement('div');
     layer.className = 'im-tweet-layer';
     layer.innerHTML = `
       <div class="im-market-question">
         Market: <span>${market.question}</span>
+        <span class="im-match-confidence">· ${match.confidence}% match</span>
       </div>
       <div class="im-tweet-actions">
         <div class="im-odds-pill">
@@ -117,7 +122,10 @@
           </svg>
           Save
         </button>
-        <div class="im-pm-link" title="View on Polymarket">
+        <button class="im-research-btn" data-market="${market.id}">
+          Research
+        </button>
+        <div class="im-pm-link" title="View on Polymarket" data-market-url="${market.polymarketUrl || ''}">
           <svg class="im-pm-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none"/>
           </svg>
@@ -132,6 +140,7 @@
         const side = btn.dataset.side;
         const mId = btn.dataset.market;
         showToast(`Bet placed: ${side} on "${market.question.slice(0, 40)}…" ✓`);
+        persistResearch(mId, researchSummary);
         switchSidebarToMarkets(mId);
       });
     });
@@ -139,6 +148,22 @@
     layer.querySelector('.im-save-btn').addEventListener('click', e => {
       e.stopPropagation();
       showToast(`Saved: "${market.question.slice(0, 40)}…" ✓`);
+    });
+
+    layer.querySelector('.im-research-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      persistResearch(market.id, researchSummary);
+      showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
+      switchSidebarToMarkets(market.id);
+    });
+
+    const pmLink = layer.querySelector('.im-pm-link');
+    pmLink?.addEventListener('click', e => {
+      e.stopPropagation();
+      const targetUrl = pmLink.getAttribute('data-market-url');
+      if (targetUrl) {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      }
     });
 
     // Insert after the tweet's action row
@@ -150,20 +175,33 @@
     }
   }
 
-  function findMarketForTweet(text) {
-    for (const market of MOCK_MARKETS) {
-      if (market.keywords.some(kw => text.includes(kw))) {
-        return market;
-      }
+  function persistResearch(marketId, payload) {
+    if (typeof setMarketResearch === 'function') {
+      setMarketResearch(marketId, payload);
     }
-    return null;
+  }
+
+  async function hydrateMarketUniverse() {
+    if (typeof loadPolymarketMarketUniverse !== 'function') {
+      return;
+    }
+    try {
+      const result = await loadPolymarketMarketUniverse({ limit: 600 });
+      if (result?.count) {
+        console.info(`[InstaMarket] Loaded ${result.count} live Polymarket markets.`);
+      }
+    } catch (error) {
+      console.warn('[InstaMarket] Falling back to local markets:', error);
+    }
   }
 
   // ── Boot ─────────────────────────────────────────────────
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      init().catch(error => console.error('[InstaMarket] Init failed:', error));
+    });
   } else {
-    init();
+    init().catch(error => console.error('[InstaMarket] Init failed:', error));
   }
 
 })();

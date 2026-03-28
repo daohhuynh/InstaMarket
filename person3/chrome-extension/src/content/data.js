@@ -259,3 +259,422 @@ const PAYOFF_CURVE_DATA = [
   {x: 40, y: 60}, {x: 50, y: 80}, {x: 60, y: 105}, {x: 70, y: 135},
   {x: 80, y: 170}, {x: 90, y: 210}, {x: 100, y: 260}
 ];
+
+// ============================================================
+// OFFLINE TEXT PARSER — tweet -> closest existing market
+// (No Bedrock / no API credits needed)
+// ============================================================
+
+const MATCH_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has",
+  "have", "if", "in", "is", "it", "its", "of", "on", "or", "that", "the",
+  "their", "to", "was", "will", "with", "this", "these", "those", "you",
+  "your", "they", "we", "our", "us", "about", "before", "after", "than",
+  "into", "out", "up", "down", "over", "under", "just", "now",
+  "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"
+]);
+
+const POLYMARKET_MARKETS_ENDPOINT = "https://gamma-api.polymarket.com/markets";
+
+let MARKET_UNIVERSE = [...MOCK_MARKETS];
+let MARKET_MATCH_INDEX = [];
+let MARKET_TOKEN_DF = new Map();
+rebuildMarketMatchIndex();
+
+function findBestMarketForTweet(tweetText) {
+  const normalizedText = normalizeForMatch(tweetText);
+  if (!normalizedText) return null;
+
+  const tweetTokens = tokenizeForMatch(normalizedText);
+  const tokenSet = new Set(tweetTokens);
+  if (tokenSet.size < 2) return null;
+
+  const scored = MARKET_MATCH_INDEX.map(entry => scoreMarket(entry, normalizedText, tokenSet));
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const second = scored[1];
+  if (!best) return null;
+
+  const distinctMatches = new Set([...best.exactMatches, ...best.tokenMatches]).size;
+  const margin = best.score - (second?.score || 0);
+  const hasStrongSingleSignal = distinctMatches === 1 && best.score >= 12 && margin >= 3;
+
+  if (best.score < 8) return null;
+  if (distinctMatches < 2 && !hasStrongSingleSignal) return null;
+  if (margin < 1.5 && best.score < 14) return null;
+
+  const confidence = calculateMatchConfidence(best.score, margin, distinctMatches);
+  return {
+    market: best.market,
+    score: best.score,
+    confidence,
+    exactMatches: best.exactMatches,
+    tokenMatches: best.tokenMatches,
+    reasons: best.reasons
+  };
+}
+
+function buildResearchSummary(tweetText, match) {
+  const textPreview = String(tweetText || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  const matchedTerms = [...new Set([...match.exactMatches, ...match.tokenMatches])].slice(0, 8);
+
+  return {
+    createdAt: new Date().toISOString(),
+    title: `Parser match for "${match.market.question}"`,
+    confidence: match.confidence,
+    matchedTerms,
+    summary: `Matched this tweet to "${match.market.question}" using deterministic keyword/token overlap.`,
+    steps: [
+      `Normalized tweet text and removed punctuation/URLs.`,
+      `Scored overlap against ${MOCK_MARKETS.length} existing markets.`,
+      `Top market score: ${match.score} (${match.confidence}% confidence).`,
+      `Matched terms: ${matchedTerms.length ? matchedTerms.join(", ") : "none listed"}.`,
+      textPreview ? `Tweet snippet: "${textPreview}${textPreview.length >= 180 ? "..." : ""}"` : "Tweet snippet unavailable."
+    ]
+  };
+}
+
+function scoreMarket(entry, normalizedText, tokenSet) {
+  let score = 0;
+  const exactMatches = [];
+  const tokenMatches = [];
+  const reasons = [];
+
+  for (const phrase of entry.keywordPhrases) {
+    if (!phrase) continue;
+    if (normalizedText.includes(phrase)) {
+      exactMatches.push(phrase);
+      score += phrase.includes(" ") ? 6 : 4;
+    }
+  }
+
+  for (const token of entry.allTokenSet) {
+    if (tokenSet.has(token)) {
+      tokenMatches.push(token);
+      score += tokenWeight(token);
+    }
+  }
+
+  const questionOverlap = entry.questionTokens.filter(token => tokenSet.has(token)).length;
+  if (entry.questionTokens.length > 0) {
+    const coverageRatio = questionOverlap / entry.questionTokens.length;
+    score += coverageRatio * 8;
+  }
+
+  const distinctMatches = new Set([...exactMatches, ...tokenMatches]).size;
+  if (distinctMatches > 1) {
+    score += Math.min(5, distinctMatches);
+  }
+
+  if (exactMatches.length === 0 && distinctMatches <= 1) {
+    score *= 0.35;
+  }
+
+  if (exactMatches.length > 0) {
+    reasons.push(`Exact keyword phrases: ${exactMatches.join(", ")}`);
+  }
+  if (tokenMatches.length > 0) {
+    reasons.push(`Token overlap: ${tokenMatches.join(", ")}`);
+  }
+
+  return {
+    market: entry.market,
+    score,
+    exactMatches,
+    tokenMatches,
+    reasons
+  };
+}
+
+function tokenWeight(token) {
+  const df = MARKET_TOKEN_DF.get(token) || 1;
+  return clampNumber(3.6 - Math.log2(df + 1), 0.45, 3.25);
+}
+
+function calculateMatchConfidence(score, margin, distinctMatches) {
+  const cappedMargin = clampNumber(margin, 0, 5);
+  const raw = 20 + score * 2.1 + cappedMargin * 5 + distinctMatches * 2;
+  return Math.round(clampNumber(raw, 40, 97));
+}
+
+function rebuildMarketMatchIndex() {
+  MARKET_MATCH_INDEX = buildMarketMatchIndex(MARKET_UNIVERSE);
+  MARKET_TOKEN_DF = buildTokenDocumentFrequency(MARKET_MATCH_INDEX);
+}
+
+function buildMarketMatchIndex(markets) {
+  return markets.map(market => {
+    const keywordPhrases = buildKeywordPhrases(market);
+    const questionTokens = tokenizeForMatch(market.question);
+    const keywordTokens = keywordPhrases.flatMap(tokenizeForMatch);
+    const allTokenSet = new Set([...questionTokens, ...keywordTokens]);
+
+    return {
+      market,
+      questionTokens,
+      keywordPhrases,
+      allTokenSet
+    };
+  });
+}
+
+function buildTokenDocumentFrequency(index) {
+  const df = new Map();
+  for (const entry of index) {
+    for (const token of entry.allTokenSet) {
+      df.set(token, (df.get(token) || 0) + 1);
+    }
+  }
+  return df;
+}
+
+function buildKeywordPhrases(market) {
+  const base = [];
+
+  if (Array.isArray(market.keywords)) {
+    base.push(...market.keywords.map(normalizeForMatch).filter(Boolean));
+  }
+
+  if (market.eventTitle) {
+    base.push(normalizeForMatch(market.eventTitle));
+  }
+  if (market.slug) {
+    base.push(normalizeForMatch(String(market.slug).replace(/-/g, " ")));
+  }
+  if (market.question) {
+    base.push(...extractQuestionPhrases(market.question));
+  }
+
+  return [...new Set(base)].slice(0, 24);
+}
+
+function extractQuestionPhrases(question) {
+  const tokens = tokenizeForMatch(question).slice(0, 12);
+  const phrases = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    phrases.push(`${tokens[index]} ${tokens[index + 1]}`);
+  }
+  return phrases;
+}
+
+function setMarketUniverse(markets) {
+  if (!Array.isArray(markets) || markets.length === 0) {
+    return;
+  }
+
+  MARKET_UNIVERSE = markets
+    .filter(market => market && typeof market.question === "string" && market.question.trim().length > 0)
+    .map(market => ({
+      ...market,
+      id: String(market.id),
+      question: String(market.question),
+      yesOdds: Number.isFinite(Number(market.yesOdds)) ? Number(market.yesOdds) : 50,
+      noOdds: Number.isFinite(Number(market.noOdds)) ? Number(market.noOdds) : 50,
+      volume: typeof market.volume === "string" ? market.volume : "$0 Vol",
+      keywords: Array.isArray(market.keywords) ? market.keywords.map(String) : [],
+      relatedMarkets: Array.isArray(market.relatedMarkets) ? market.relatedMarkets.map(String) : [],
+      category: typeof market.category === "string" ? market.category : "",
+      slug: typeof market.slug === "string" ? market.slug : "",
+      eventTitle: typeof market.eventTitle === "string" ? market.eventTitle : "",
+      polymarketUrl: typeof market.polymarketUrl === "string" ? market.polymarketUrl : ""
+    }));
+
+  rebuildMarketMatchIndex();
+}
+
+function getMarketUniverse() {
+  return MARKET_UNIVERSE;
+}
+
+function getMarketById(marketId) {
+  return MARKET_UNIVERSE.find(market => String(market.id) === String(marketId)) || null;
+}
+
+async function loadPolymarketMarketUniverse(options = {}) {
+  const limit = clampNumber(Number(options.limit) || 500, 50, 1200);
+  const endpoint = `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false&limit=${Math.round(limit)}&order=volumeNum&ascending=false`;
+
+  const response = await fetch(endpoint, { method: "GET", credentials: "omit", cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Polymarket fetch failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error("Polymarket payload is not an array.");
+  }
+
+  const mapped = payload
+    .map(mapPolymarketMarket)
+    .filter(Boolean);
+
+  if (mapped.length < 25) {
+    throw new Error("Polymarket returned too few markets.");
+  }
+
+  setMarketUniverse(mapped);
+  return { source: "polymarket", count: mapped.length };
+}
+
+function mapPolymarketMarket(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const question = typeof raw.question === "string" ? raw.question.trim() : "";
+  if (!question) return null;
+
+  const events = Array.isArray(raw.events) ? raw.events : [];
+  const firstEvent = events[0] && typeof events[0] === "object" ? events[0] : null;
+  const eventTitle = typeof firstEvent?.title === "string" ? firstEvent.title : "";
+  const eventSlug = typeof firstEvent?.slug === "string" ? firstEvent.slug : "";
+  const slug = typeof raw.slug === "string" ? raw.slug : "";
+  const category = typeof raw.category === "string" ? raw.category : "";
+  const urlSlug = eventSlug || slug;
+
+  const odds = parseYesNoOdds(raw.outcomes, raw.outcomePrices);
+  const volumeValue = Number(raw.volumeNum ?? raw.volume ?? raw.volume24hr ?? 0);
+
+  return {
+    id: String(raw.id ?? raw.conditionId ?? slug ?? question),
+    question,
+    yesOdds: odds.yesOdds,
+    noOdds: odds.noOdds,
+    volume: formatVolumeShort(volumeValue),
+    keywords: buildSeedKeywords({ question, slug, category, eventTitle }),
+    relatedMarkets: [],
+    category,
+    slug,
+    eventTitle,
+    polymarketUrl: urlSlug ? `https://polymarket.com/event/${urlSlug}` : "https://polymarket.com"
+  };
+}
+
+function buildSeedKeywords({ question, slug, category, eventTitle }) {
+  const seeds = [
+    question,
+    eventTitle,
+    slug ? slug.replace(/-/g, " ") : "",
+    category ? category.replace(/-/g, " ") : ""
+  ]
+    .map(normalizeForMatch)
+    .filter(Boolean);
+
+  const tokenSeeds = seeds.flatMap(tokenizeForMatch);
+  return [...new Set([...seeds, ...tokenSeeds])].slice(0, 24);
+}
+
+function parseYesNoOdds(outcomesValue, pricesValue) {
+  const outcomes = parseMaybeJsonArray(outcomesValue).map(value => String(value).toLowerCase());
+  const prices = parseMaybeJsonArray(pricesValue).map(value => Number(value));
+
+  const yesIndex = outcomes.findIndex(value => value === "yes");
+  const noIndex = outcomes.findIndex(value => value === "no");
+
+  let yesOdds = NaN;
+  let noOdds = NaN;
+
+  if (yesIndex >= 0 && Number.isFinite(prices[yesIndex])) {
+    yesOdds = prices[yesIndex] * 100;
+  }
+  if (noIndex >= 0 && Number.isFinite(prices[noIndex])) {
+    noOdds = prices[noIndex] * 100;
+  }
+
+  if (!Number.isFinite(yesOdds) && Number.isFinite(noOdds)) {
+    yesOdds = 100 - noOdds;
+  }
+  if (!Number.isFinite(noOdds) && Number.isFinite(yesOdds)) {
+    noOdds = 100 - yesOdds;
+  }
+
+  if (!Number.isFinite(yesOdds) || !Number.isFinite(noOdds)) {
+    yesOdds = 50;
+    noOdds = 50;
+  }
+
+  yesOdds = clampNumber(yesOdds, 1, 99);
+  noOdds = clampNumber(noOdds, 1, 99);
+
+  return {
+    yesOdds: Math.round(yesOdds),
+    noOdds: Math.round(noOdds)
+  };
+}
+
+function parseMaybeJsonArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function formatVolumeShort(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return "$0 Vol";
+  }
+  if (numeric >= 1_000_000_000) {
+    return `$${(numeric / 1_000_000_000).toFixed(1)}B Vol`;
+  }
+  if (numeric >= 1_000_000) {
+    return `$${(numeric / 1_000_000).toFixed(1)}M Vol`;
+  }
+  if (numeric >= 1_000) {
+    return `$${(numeric / 1_000).toFixed(1)}K Vol`;
+  }
+  return `$${Math.round(numeric)} Vol`;
+}
+
+function normalizeForMatch(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[@#]/g, " ")
+    .replace(/[^a-z0-9$.\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeForMatch(text) {
+  return normalizeForMatch(text)
+    .split(" ")
+    .map(stemToken)
+    .filter(token => token.length > 1 && !MATCH_STOP_WORDS.has(token) && !isPureNumberToken(token));
+}
+
+function stemToken(token) {
+  if (token.endsWith("ies") && token.length > 4) {
+    return token.slice(0, -3) + "y";
+  }
+  if (token.endsWith("ing") && token.length > 5) {
+    return token.slice(0, -3);
+  }
+  if (token.endsWith("ed") && token.length > 4) {
+    return token.slice(0, -2);
+  }
+  if (token.endsWith("s") && token.length > 3) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
+
+function isPureNumberToken(token) {
+  return /^\d+$/.test(token);
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+if (typeof window !== "undefined") {
+  window.loadPolymarketMarketUniverse = loadPolymarketMarketUniverse;
+  window.getMarketUniverse = getMarketUniverse;
+  window.getMarketById = getMarketById;
+}

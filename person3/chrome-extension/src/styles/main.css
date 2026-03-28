@@ -49,6 +49,12 @@
   font-weight: 600;
 }
 
+.im-market-question .im-match-confidence {
+  color: var(--pm-text-secondary);
+  font-weight: 500;
+  margin-left: 6px;
+}
+
 .im-tweet-actions {
   display: flex;
   align-items: center;
@@ -167,6 +173,27 @@
 .im-save-btn:hover {
   border-color: var(--pm-text-secondary);
   color: var(--pm-text);
+}
+
+.im-research-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid var(--pm-blue);
+  border-radius: var(--pm-radius-pill);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pm-blue);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  font-family: var(--pm-font);
+}
+
+.im-research-btn:hover {
+  background: rgba(59, 130, 246, 0.24);
+  transform: scale(1.03);
 }
 
 .im-pm-link {
