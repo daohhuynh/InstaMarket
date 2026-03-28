@@ -293,10 +293,16 @@ async function findBestMarketForTweetWithAi(tweetText) {
   const ranked = rankMarketCandidates(tweetText, 25);
   const parserMatch = selectParserMatchFromRanked(ranked);
 
-  if (!shouldUseAiRerank()) {
+  if (!ranked.length) {
     return parserMatch;
   }
-  if (!ranked.length) {
+
+  const hasViableCandidates = Boolean(parserMatch) || (ranked[0]?.score ?? 0) >= 6;
+  if (!hasViableCandidates) {
+    return parserMatch;
+  }
+
+  if (!shouldUseAiRerank()) {
     return parserMatch;
   }
 
@@ -313,8 +319,10 @@ async function findBestMarketForTweetWithAi(tweetText) {
   const selectedCandidate = ranked.find(candidate => String(candidate.market.id) === String(aiMarket.id));
   const topParserScore = ranked[0]?.score || 0;
   const selectedScore = selectedCandidate?.score || 0;
+  const aiConfidence = Number(aiResult.confidence_score) || 0;
   const hasStrongParserSupport = selectedScore >= 8 && selectedScore >= topParserScore * 0.55;
-  if (!hasStrongParserSupport) {
+  const hasStrongAiSupport = aiConfidence >= 78 && selectedScore >= 5 && selectedScore >= topParserScore * 0.45;
+  if (!hasStrongParserSupport && !hasStrongAiSupport) {
     return parserMatch;
   }
 
@@ -644,22 +652,42 @@ function getMarketById(marketId) {
 }
 
 async function loadPolymarketMarketUniverse(options = {}) {
-  const limit = clampNumber(Number(options.limit) || 500, 50, 1200);
-  const endpoint = `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false&limit=${Math.round(limit)}&order=volumeNum&ascending=false`;
+  const targetLimit = clampNumber(Number(options.limit) || 1800, 200, 3500);
+  const pageSize = clampNumber(Number(options.pageSize) || 500, 200, 500);
+  const maxPages = clampNumber(Number(options.maxPages) || 6, 1, 8);
 
-  const response = await fetch(endpoint, { method: "GET", credentials: "omit", cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Polymarket fetch failed: ${response.status}`);
+  const aggregated = [];
+  for (let page = 0; page < maxPages && aggregated.length < targetLimit; page += 1) {
+    const offset = page * pageSize;
+    const endpoint =
+      `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false` +
+      `&limit=${Math.round(pageSize)}&offset=${Math.round(offset)}&order=volumeNum&ascending=false`;
+
+    const response = await fetch(endpoint, { method: "GET", credentials: "omit", cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Polymarket fetch failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error("Polymarket payload is not an array.");
+    }
+
+    if (payload.length === 0) {
+      break;
+    }
+
+    aggregated.push(...payload);
+    if (payload.length < pageSize) {
+      break;
+    }
   }
 
-  const payload = await response.json();
-  if (!Array.isArray(payload)) {
-    throw new Error("Polymarket payload is not an array.");
-  }
-
-  const mapped = payload
+  const dedupedRaw = dedupeMarketsById(aggregated);
+  const mapped = dedupedRaw
     .map(mapPolymarketMarket)
-    .filter(Boolean);
+    .filter(Boolean)
+    .slice(0, targetLimit);
 
   if (mapped.length < 25) {
     throw new Error("Polymarket returned too few markets.");
@@ -667,6 +695,18 @@ async function loadPolymarketMarketUniverse(options = {}) {
 
   setMarketUniverse(mapped);
   return { source: "polymarket", count: mapped.length };
+}
+
+function dedupeMarketsById(rawMarkets) {
+  const byId = new Map();
+  for (const market of rawMarkets) {
+    const id = String(market?.id ?? market?.conditionId ?? "");
+    if (!id) continue;
+    if (!byId.has(id)) {
+      byId.set(id, market);
+    }
+  }
+  return [...byId.values()];
 }
 
 function mapPolymarketMarket(raw) {

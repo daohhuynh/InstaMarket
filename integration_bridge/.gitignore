@@ -1,0 +1,12 @@
+# Node dependencies
+node_modules/
+
+# Secrets and environments
+.env
+
+# Compiled C++ binaries
+clob_engine
+*.o
+
+# macOS junk
+.DS_Store

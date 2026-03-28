@@ -217,6 +217,7 @@
    SIDEBAR — replaces Twitter right sidebar
    ============================================ */
 
+/* Sidebar — slides in/out from the right */
 #im-sidebar {
   position: fixed;
   top: 0;
@@ -225,11 +226,49 @@
   height: 100vh;
   background: var(--pm-bg);
   border-left: 1px solid var(--pm-border);
-  z-index: 99999;
+  z-index: 9000;          /* below Twitter's own fixed UI (z ~9999+) */
   display: flex;
   flex-direction: column;
   font-family: var(--pm-font);
   overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+
+#im-sidebar.im-collapsed {
+  transform: translateX(100%);
+}
+
+/* Collapse / expand toggle tab — sits on the left edge of the sidebar */
+#im-sidebar-toggle {
+  position: fixed;
+  top: 50%;
+  right: 380px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 52px;
+  background: var(--pm-surface);
+  border: 1px solid var(--pm-border);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  z-index: 9001;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pm-text-secondary);
+  font-size: 11px;
+  transition: right 0.3s cubic-bezier(0.4,0,0.2,1), background 0.15s, color 0.15s;
+  padding: 0;
+  font-family: var(--pm-font);
+}
+
+#im-sidebar-toggle:hover {
+  background: var(--pm-surface2);
+  color: var(--pm-green);
+}
+
+#im-sidebar-toggle.im-collapsed {
+  right: 0;
 }
 
 /* Tab bar */
@@ -779,26 +818,29 @@
 
 #im-ditto-btn {
   position: fixed;
-  bottom: 160px;
-  right: 16px;
+  /* Stack above Twitter's two native buttons (which sit at ~bottom:84px)
+     Twitter button height ~52px + 8px gap = 144px total from bottom */
+  bottom: 144px;
+  right: 12px;
   width: 52px;
   height: 52px;
   border-radius: 50%;
   background: var(--pm-purple);
-  border: none;
+  border: 2px solid rgba(167,139,250,0.4);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 20px rgba(124, 58, 237, 0.5);
-  z-index: 100000;
+  z-index: 99999;
   transition: transform 0.2s, box-shadow 0.2s;
-  font-size: 22px;
+  padding: 0;
+  overflow: hidden;
 }
 
 #im-ditto-btn:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 28px rgba(124, 58, 237, 0.7);
+  box-shadow: 0 6px 28px rgba(124, 58, 237, 0.8);
 }
 
 /* ============================================
@@ -808,8 +850,8 @@
 #im-ditto-modal {
   display: none;
   position: fixed;
-  bottom: 220px;
-  right: 16px;
+  bottom: 206px;
+  right: 12px;
   width: 320px;
   background: var(--pm-surface);
   border: 1px solid var(--pm-purple);

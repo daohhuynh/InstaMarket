@@ -20,16 +20,38 @@
     if (sidebarMounted) return;
     sidebarMounted = true;
     createSidebar();
-    // Push Twitter's own right sidebar out of the way
+    mountCollapseToggle();
+
+    // Hide Twitter's right sidebar column (we replace it), but don't touch their floating buttons
     const style = document.createElement('style');
     style.textContent = `
-      /* Push Twitter content left to make room for InstaMarket sidebar */
       @media (min-width: 1280px) {
-        main[role="main"] { margin-right: 400px !important; }
+        main[role="main"] { margin-right: 380px !important; transition: margin-right 0.3s ease; }
+        main[role="main"].im-sidebar-hidden { margin-right: 0 !important; }
         [data-testid="sidebarColumn"] { display: none !important; }
       }
     `;
     document.head.appendChild(style);
+  }
+
+  function mountCollapseToggle() {
+    if (document.getElementById('im-sidebar-toggle')) return;
+    const btn = document.createElement('button');
+    btn.id = 'im-sidebar-toggle';
+    btn.title = 'Collapse / expand InstaMarket sidebar';
+    btn.innerHTML = '❯';
+    btn.addEventListener('click', toggleSidebar);
+    document.body.appendChild(btn);
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.getElementById('im-sidebar');
+    const toggle = document.getElementById('im-sidebar-toggle');
+    const main = document.querySelector('main[role="main"]');
+    const collapsed = sidebar.classList.toggle('im-collapsed');
+    toggle.classList.toggle('im-collapsed', collapsed);
+    toggle.innerHTML = collapsed ? '❮' : '❯';
+    if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
   }
 
   // ── Ditto floating button ───────────────────────────────
@@ -39,7 +61,8 @@
     const btn = document.createElement('button');
     btn.id = 'im-ditto-btn';
     btn.title = 'Ditto — Find your trading tribe';
-    btn.innerHTML = `🟣`;
+    // Real Ditto sprite from PokeAPI (official Nintendo/Game Freak sprites, open use)
+    btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto" style="width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 0 6px rgba(167,139,250,0.8));">`;
     btn.addEventListener('click', toggleDittoModal);
     document.body.appendChild(btn);
 
@@ -48,7 +71,7 @@
     modal.innerHTML = `
       <div class="im-ditto-header">
         <div>
-          <div class="im-ditto-title">🟣 Ditto Matchmaking</div>
+          <div class="im-ditto-title"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" style="width:20px;height:20px;vertical-align:middle;image-rendering:pixelated;margin-right:6px;">Ditto Matchmaking</div>
           <div class="im-ditto-sub">Your trading tribe</div>
         </div>
         <button class="im-ditto-close" onclick="document.getElementById('im-ditto-modal').classList.remove('open')">✕</button>
@@ -190,7 +213,7 @@
       return;
     }
     try {
-      const result = await loadPolymarketMarketUniverse({ limit: 600 });
+      const result = await loadPolymarketMarketUniverse({ limit: 2200, pageSize: 500, maxPages: 6 });
       if (result?.count) {
         console.info(`[InstaMarket] Loaded ${result.count} live Polymarket markets.`);
       }

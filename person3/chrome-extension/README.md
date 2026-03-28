@@ -46,6 +46,7 @@ Live market matching lives in **`src/content/data.js`**:
 - For the first 5 tweets on each page load, it calls `http://localhost:8787/v1/match-market` to rerank using Bedrock.
 - After 5 calls, it falls back to parser-only matching for the rest of the page until refresh.
 - If API is unavailable, it falls back automatically to parser results.
+- Market universe now loads from multiple paginated Polymarket slices (not just a single top-volume page), so niche topics are easier to match.
 
 ### `MOCK_MARKETS` → Polymarket API
 ```js
