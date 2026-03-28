@@ -1,0 +1,15 @@
+# Node dependencies
+node_modules/
+
+# Secrets and environments
+.env
+
+# Compiled C++ binaries
+clob_engine
+*.o
+
+# Solana localnet
+test-ledger/
+
+# macOS junk
+.DS_Store
