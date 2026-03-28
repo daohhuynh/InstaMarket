@@ -209,6 +209,7 @@ function renderResearchCard(research) {
   const terms = Array.isArray(research.matchedTerms) ? research.matchedTerms : [];
   const steps = Array.isArray(research.steps) ? research.steps : [];
   const confidence = Number.isFinite(research.confidence) ? research.confidence : 0;
+  const method = typeof research.method === "string" ? research.method : "Parser";
 
   return `
     <div class="im-risk-panel">
@@ -218,6 +219,9 @@ function renderResearchCard(research) {
       </div>
       <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
         ${research.summary || "No summary available."}
+      </div>
+      <div style="font-size:11px;color:var(--pm-blue);font-weight:600;">
+        Method: ${method}
       </div>
       ${terms.length ? `
         <div style="display:flex;gap:6px;flex-wrap:wrap;">

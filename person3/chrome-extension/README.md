@@ -41,6 +41,12 @@ Live market matching lives in **`src/content/data.js`**:
 - `findBestMarketForTweet(tweetText)` scores each tweet against the live market universe (no AWS).
 - `buildResearchSummary(...)` feeds the Research card in the sidebar.
 
+### Bedrock rerank (first 5 tweets per refresh)
+- `findBestMarketForTweetWithAi(tweetText)` uses parser candidates first.
+- For the first 5 tweets on each page load, it calls `http://localhost:8787/v1/match-market` to rerank using Bedrock.
+- After 5 calls, it falls back to parser-only matching for the rest of the page until refresh.
+- If API is unavailable, it falls back automatically to parser results.
+
 ### `MOCK_MARKETS` → Polymarket API
 ```js
 // Fallback only (used if live fetch fails)
@@ -104,6 +110,13 @@ The extension now uses an offline text parser in `src/content/data.js`:
 No Bedrock calls are required for this matching flow.
 
 If you update `manifest.json` host permissions, reload the extension in `chrome://extensions`.
+
+To enable Bedrock reranking for the first 5 tweets, run the Person 2 API:
+
+```bash
+cd ../person2
+npm run match-api
+```
 
 ### Payoff curve chart
 `PAYOFF_CURVE_DATA` in `data.js` — replace with real payoff calculation:

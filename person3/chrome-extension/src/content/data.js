@@ -275,24 +275,82 @@ const MATCH_STOP_WORDS = new Set([
 ]);
 
 const POLYMARKET_MARKETS_ENDPOINT = "https://gamma-api.polymarket.com/markets";
+const AI_MARKET_MATCH_ENDPOINT_DEFAULT = "http://localhost:8787/v1/match-market";
+const AI_MARKET_MATCH_LIMIT_PER_LOAD = 5;
 
 let MARKET_UNIVERSE = [...MOCK_MARKETS];
 let MARKET_MATCH_INDEX = [];
 let MARKET_TOKEN_DF = new Map();
+let AI_MARKET_MATCH_USED = 0;
 rebuildMarketMatchIndex();
 
 function findBestMarketForTweet(tweetText) {
+  const ranked = rankMarketCandidates(tweetText, 30);
+  return selectParserMatchFromRanked(ranked);
+}
+
+async function findBestMarketForTweetWithAi(tweetText) {
+  const ranked = rankMarketCandidates(tweetText, 25);
+  const parserMatch = selectParserMatchFromRanked(ranked);
+
+  if (!shouldUseAiRerank()) {
+    return parserMatch;
+  }
+  if (!ranked.length) {
+    return parserMatch;
+  }
+
+  const aiResult = await rerankWithAi(tweetText, ranked, parserMatch);
+  if (!aiResult) {
+    return parserMatch;
+  }
+
+  const aiMarket = getMarketById(aiResult.matched_market_id);
+  if (!aiMarket) {
+    return parserMatch;
+  }
+
+  const selectedCandidate = ranked.find(candidate => String(candidate.market.id) === String(aiMarket.id));
+  const topParserScore = ranked[0]?.score || 0;
+  const selectedScore = selectedCandidate?.score || 0;
+  const hasStrongParserSupport = selectedScore >= 8 && selectedScore >= topParserScore * 0.55;
+  if (!hasStrongParserSupport) {
+    return parserMatch;
+  }
+
+  const parserTerms = parserMatch ? [...parserMatch.exactMatches, ...parserMatch.tokenMatches] : [];
+  const aiTerms = Array.isArray(aiResult.key_terms) ? aiResult.key_terms : [];
+  const tokenMatches = [...new Set([...parserTerms, ...aiTerms])];
+  return {
+    market: aiMarket,
+    score: Number.isFinite(aiResult.confidence_score) ? Number(aiResult.confidence_score) : (parserMatch?.score ?? 0),
+    confidence: clampNumber(Number(aiResult.confidence_score) || parserMatch?.confidence || 70, 1, 99),
+    exactMatches: parserMatch?.exactMatches || [],
+    tokenMatches,
+    reasons: [
+      "Bedrock reranked top parser candidates for this tweet.",
+      typeof aiResult.rationale === "string" ? aiResult.rationale : "No rationale returned.",
+    ],
+    source: "aws-bedrock",
+  };
+}
+
+function rankMarketCandidates(tweetText, limit = 30) {
   const normalizedText = normalizeForMatch(tweetText);
-  if (!normalizedText) return null;
+  if (!normalizedText) return [];
 
   const tweetTokens = tokenizeForMatch(normalizedText);
   const tokenSet = new Set(tweetTokens);
-  if (tokenSet.size < 2) return null;
+  if (tokenSet.size < 2) return [];
 
-  const scored = MARKET_MATCH_INDEX.map(entry => scoreMarket(entry, normalizedText, tokenSet));
-  scored.sort((a, b) => b.score - a.score);
-  const best = scored[0];
-  const second = scored[1];
+  const scored = MARKET_MATCH_INDEX.map(entry => scoreMarket(entry, normalizedText, tokenSet))
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((item, index) => ({ ...item, rank: index + 1 }));
+}
+
+function selectParserMatchFromRanked(ranked) {
+  const best = ranked[0];
+  const second = ranked[1];
   if (!best) return null;
 
   const distinctMatches = new Set([...best.exactMatches, ...best.tokenMatches]).size;
@@ -303,35 +361,130 @@ function findBestMarketForTweet(tweetText) {
   if (distinctMatches < 2 && !hasStrongSingleSignal) return null;
   if (margin < 1.5 && best.score < 14) return null;
 
-  const confidence = calculateMatchConfidence(best.score, margin, distinctMatches);
   return {
     market: best.market,
     score: best.score,
-    confidence,
+    confidence: calculateMatchConfidence(best.score, margin, distinctMatches),
     exactMatches: best.exactMatches,
     tokenMatches: best.tokenMatches,
-    reasons: best.reasons
+    reasons: best.reasons,
+    source: "parser",
   };
 }
 
 function buildResearchSummary(tweetText, match) {
   const textPreview = String(tweetText || "").replace(/\s+/g, " ").trim().slice(0, 180);
   const matchedTerms = [...new Set([...match.exactMatches, ...match.tokenMatches])].slice(0, 8);
+  const method = match.source === "aws-bedrock" ? "Bedrock AI + parser rerank" : "Deterministic parser";
 
   return {
     createdAt: new Date().toISOString(),
-    title: `Parser match for "${match.market.question}"`,
+    title: `Match for "${match.market.question}"`,
+    method,
     confidence: match.confidence,
     matchedTerms,
-    summary: `Matched this tweet to "${match.market.question}" using deterministic keyword/token overlap.`,
+    summary:
+      match.source === "aws-bedrock"
+        ? `Matched this tweet to "${match.market.question}" using Bedrock reranking over parser candidates.`
+        : `Matched this tweet to "${match.market.question}" using deterministic keyword/token overlap.`,
     steps: [
       `Normalized tweet text and removed punctuation/URLs.`,
-      `Scored overlap against ${MOCK_MARKETS.length} existing markets.`,
+      `Scored overlap against ${MARKET_UNIVERSE.length} existing markets.`,
       `Top market score: ${match.score} (${match.confidence}% confidence).`,
       `Matched terms: ${matchedTerms.length ? matchedTerms.join(", ") : "none listed"}.`,
+      ...((match.reasons || []).map(reason => `Reason: ${reason}`)),
       textPreview ? `Tweet snippet: "${textPreview}${textPreview.length >= 180 ? "..." : ""}"` : "Tweet snippet unavailable."
     ]
   };
+}
+
+function shouldUseAiRerank() {
+  if (AI_MARKET_MATCH_USED >= AI_MARKET_MATCH_LIMIT_PER_LOAD) {
+    return false;
+  }
+  AI_MARKET_MATCH_USED += 1;
+  return true;
+}
+
+async function rerankWithAi(tweetText, rankedCandidates, parserMatch) {
+  const endpoint = getAiMarketMatchEndpoint();
+  if (!endpoint) {
+    return null;
+  }
+
+  const payload = {
+    tweet_text: String(tweetText || "").slice(0, 2500),
+    parser_best_market_id: parserMatch?.market?.id ?? rankedCandidates[0]?.market?.id ?? null,
+    parser_best_confidence: parserMatch?.confidence ?? 0,
+    candidates: rankedCandidates.slice(0, 25).map(candidate => ({
+      id: candidate.market.id,
+      question: candidate.market.question,
+      category: candidate.market.category || "",
+      eventTitle: candidate.market.eventTitle || "",
+      slug: candidate.market.slug || "",
+      yesOdds: Number(candidate.market.yesOdds) || 0,
+      noOdds: Number(candidate.market.noOdds) || 0,
+      volume: candidate.market.volume || "",
+      parser_score: Number(candidate.score) || 0,
+    })),
+  };
+
+  try {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 4500) : null;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "omit",
+      signal: controller?.signal,
+    });
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function getAiMarketMatchEndpoint() {
+  const fromStorage = safeReadLocalStorage("instamarket_ai_match_endpoint");
+  const fromWindow =
+    typeof window !== "undefined" && typeof window.INSTAMARKET_AI_MATCH_ENDPOINT === "string"
+      ? window.INSTAMARKET_AI_MATCH_ENDPOINT
+      : "";
+  const endpoint = fromStorage || fromWindow || AI_MARKET_MATCH_ENDPOINT_DEFAULT;
+  return normalizeEndpoint(endpoint);
+}
+
+function normalizeEndpoint(value) {
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const asUrl = new URL(trimmed);
+    if (asUrl.protocol !== "http:" && asUrl.protocol !== "https:") return "";
+    return asUrl.toString();
+  } catch {
+    return "";
+  }
+}
+
+function safeReadLocalStorage(key) {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    const value = localStorage.getItem(key);
+    return typeof value === "string" ? value : "";
+  } catch {
+    return "";
+  }
 }
 
 function scoreMarket(entry, normalizedText, tokenSet) {

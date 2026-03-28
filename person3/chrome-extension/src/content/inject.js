@@ -78,18 +78,22 @@
   // ── Tweet observation ────────────────────────────────────
   function observeTweets() {
     const observer = new MutationObserver(() => {
-      document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(injectTweetLayer);
+      document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(tweet => {
+        injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
+      });
     });
     observer.observe(document.body, { childList: true, subtree: true });
     // Also run immediately on existing tweets
-    document.querySelectorAll('article[data-testid="tweet"]').forEach(injectTweetLayer);
+    document.querySelectorAll('article[data-testid="tweet"]').forEach(tweet => {
+      injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
+    });
   }
 
-  function injectTweetLayer(tweet) {
+  async function injectTweetLayer(tweet) {
     tweet.setAttribute('data-im-injected', 'true');
 
     const tweetText = tweet.innerText;
-    const match = findBestMarketForTweet(tweetText);
+    const match = await findBestMarketForTweetWithAi(tweetText);
     if (!match) return;
     const market = match.market;
     const researchSummary = buildResearchSummary(tweetText, match);
@@ -100,7 +104,7 @@
     layer.innerHTML = `
       <div class="im-market-question">
         Market: <span>${market.question}</span>
-        <span class="im-match-confidence">· ${match.confidence}% match</span>
+        <span class="im-match-confidence">· ${match.confidence}% ${match.source === 'aws-bedrock' ? 'AI' : 'parser'} match</span>
       </div>
       <div class="im-tweet-actions">
         <div class="im-odds-pill">

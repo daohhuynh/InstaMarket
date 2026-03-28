@@ -66,3 +66,22 @@ CLOB_ENDPOINT=http://localhost:8080/api/paper-trades npm run simulate -- \
 npm run test
 npm run build
 ```
+
+## Chrome Extension Market-Match API (first 5 tweets)
+
+Run this server so the extension can use Bedrock to rerank parser candidates for the first 5 tweets on each page load:
+
+```bash
+cd person2
+npm run match-api
+```
+
+Endpoint:
+- `POST /v1/match-market`
+- Default URL: `http://localhost:8787/v1/match-market`
+
+Health check:
+
+```bash
+curl http://localhost:8787/health
+```
