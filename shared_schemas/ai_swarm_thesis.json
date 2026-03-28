@@ -1,0 +1,15 @@
+{
+  "market_id": "0x123abc...",
+  "recommended_action": "YES",
+  "recommended_size_usdc": 50,
+  "confidence_score": 85,
+  "agent_insights": [
+    { "source": "Reddit", "insight": "r/singularity consensus points to an imminent drop based on Sam Altman's recent cryptic tweets." },
+    { "source": "News", "insight": "Bloomberg reported server capacity scaling that matches previous major launch patterns." }
+  ],
+  "risk_analysis": {
+    "resolution_risk": "Low - strictly defined by official OpenAI blog.",
+    "event_risk": "Medium - dependent on internal delays.",
+    "liquidity_risk": "Low - highly liquid market."
+  }
+}
