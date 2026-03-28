@@ -1,0 +1,20 @@
+{
+  "name": "@instamarket/person2-swarm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Person 2 (Swarm Architect) module: AWS Bedrock Nova Lite orchestration + persona trade simulation",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/**/*.test.ts",
+    "simulate": "tsx src/cli/runSimulation.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.879.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
