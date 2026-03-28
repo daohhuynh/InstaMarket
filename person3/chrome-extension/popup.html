@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InstaMarket</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 280px;
+      background: #0d0f13;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #7c3aed, #00c853);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .logo-text { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo-sub { font-size: 11px; color: #8b92a5; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 12px;
+      background: rgba(0,200,83,0.1);
+      border: 1px solid rgba(0,200,83,0.3);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #00c853;
+      margin-bottom: 14px;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #00c853;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stat {
+      background: #161a23;
+      border: 1px solid #2a2f3e;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .stat-label { font-size: 10px; color: #8b92a5; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-val { font-size: 16px; font-weight: 700; margin-top: 2px; }
+    .green { color: #00c853; }
+    .footer {
+      font-size: 10px;
+      color: #8b92a5;
+      text-align: center;
+      border-top: 1px solid #2a2f3e;
+      padding-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-row">
+    <div class="logo-icon">📈</div>
+    <div>
+      <div class="logo-text">InstaMarket</div>
+      <div class="logo-sub">Polymarket × Twitter</div>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <div class="dot"></div>
+    Active on Twitter / X
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat">
+      <div class="stat-label">Portfolio</div>
+      <div class="stat-val green">$4,821</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Today's P&L</div>
+      <div class="stat-val green">+$312</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Win Rate</div>
+      <div class="stat-val">71%</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Open Bets</div>
+      <div class="stat-val">4</div>
+    </div>
+  </div>
+
+  <div class="footer">Open Twitter to start betting on markets</div>
+</body>
+</html>
