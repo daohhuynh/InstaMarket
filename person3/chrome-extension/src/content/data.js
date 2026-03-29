@@ -46,9 +46,10 @@ const TOKEN_CANONICAL_MAP = new Map([
 
 const POLYMARKET_MARKETS_ENDPOINT = "https://gamma-api.polymarket.com/markets";
 const AI_MARKET_MATCH_ENDPOINT_DEFAULT = "http://localhost:8787/v1/match-market";
+const AI_RESEARCH_THESIS_ENDPOINT_DEFAULT = "http://localhost:8787/v1/research-thesis";
 const AI_MARKET_MATCH_LIMIT_PER_LOAD = 5;
 const EXTENSION_JSON_FETCH_MESSAGE = "IM_FETCH_JSON";
-const DEFAULT_FETCH_TIMEOUT_MS = 12000;
+const DEFAULT_FETCH_TIMEOUT_MS = 120000;
 const MIN_MARKETS_REQUIRED = 25;
 const STRONG_MATCH_MIN_SCORE = 12;
 const WEAK_MATCH_MIN_SCORE = 9.5;
@@ -123,6 +124,102 @@ async function findBestMarketForTweetWithAi(tweetText) {
     ],
     source: "aws-bedrock",
   };
+}
+
+async function runResearchThesisForTweet(input) {
+  if (!input || typeof input !== "object") return null;
+  const endpoint = getAiResearchEndpoint();
+  if (!endpoint) return null;
+  const defaultEndpoint = normalizeEndpoint(AI_RESEARCH_THESIS_ENDPOINT_DEFAULT);
+
+  const market = input.market || {};
+  const payload = {
+    tweet_text: String(input.tweetText || "").slice(0, 4000),
+    post_url: typeof input.postUrl === "string" ? input.postUrl : "",
+    post_author: typeof input.postAuthor === "string" ? input.postAuthor : "",
+    post_timestamp: typeof input.postTimestamp === "string" ? input.postTimestamp : "",
+    market: {
+      market_id: String(market.id || ""),
+      question: String(market.question || ""),
+      category: typeof market.category === "string" ? market.category : "",
+      event_title: typeof market.eventTitle === "string" ? market.eventTitle : "",
+      slug: typeof market.slug === "string" ? market.slug : "",
+      polymarket_url: typeof market.polymarketUrl === "string" ? market.polymarketUrl : "",
+      yes_odds: Number(market.yesOdds) || 50,
+      no_odds: Number(market.noOdds) || 50,
+      volume: typeof market.volume === "string" ? market.volume : "",
+      resolution_date: typeof market.resolutionDate === "string" ? market.resolutionDate : "",
+      market_context: typeof input.marketContext === "string" ? input.marketContext : "",
+      resolution_criteria: typeof input.resolutionCriteria === "string" ? input.resolutionCriteria : "",
+    },
+  };
+
+  if (!payload.market.market_id || !payload.market.question || !payload.tweet_text) {
+    return null;
+  }
+
+  try {
+    const primary = await fetchThesisPayloadWithRetry(endpoint, payload, 2);
+    if (isThesisPayload(primary)) {
+      return primary;
+    }
+
+    if (defaultEndpoint && endpoint !== defaultEndpoint) {
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem("instamarket_ai_research_endpoint");
+        }
+      } catch {
+        // Ignore storage errors.
+      }
+
+      const fallbackFromDefault = await fetchThesisPayloadWithRetry(defaultEndpoint, payload, 2);
+      return isThesisPayload(fallbackFromDefault) ? fallbackFromDefault : null;
+    }
+
+    return null;
+  } catch {
+    if (defaultEndpoint && endpoint !== defaultEndpoint) {
+      try {
+        const fallbackFromDefault = await fetchThesisPayloadWithRetry(defaultEndpoint, payload, 2);
+        return isThesisPayload(fallbackFromDefault) ? fallbackFromDefault : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function isThesisPayload(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      value.thesis &&
+      typeof value.thesis === "object" &&
+      value.dossier &&
+      typeof value.dossier === "object"
+  );
+}
+
+async function fetchThesisPayloadWithRetry(endpoint, payload, attempts = 2) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetchJsonWithExtensionSupport(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        timeoutMs: 330_000,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  return null;
 }
 
 function rankMarketCandidates(tweetText, limit = 30) {
@@ -253,6 +350,16 @@ function getAiMarketMatchEndpoint() {
   return normalizeEndpoint(endpoint);
 }
 
+function getAiResearchEndpoint() {
+  const fromStorage = safeReadLocalStorage("instamarket_ai_research_endpoint");
+  const fromWindow =
+    typeof window !== "undefined" && typeof window.INSTAMARKET_AI_RESEARCH_ENDPOINT === "string"
+      ? window.INSTAMARKET_AI_RESEARCH_ENDPOINT
+      : "";
+  const endpoint = fromStorage || fromWindow || AI_RESEARCH_THESIS_ENDPOINT_DEFAULT;
+  return normalizeEndpoint(endpoint);
+}
+
 function normalizeEndpoint(value) {
   if (!value || typeof value !== "string") return "";
   const trimmed = value.trim();
@@ -327,7 +434,7 @@ async function fetchJsonViaExtensionWorker(url, options = {}) {
 async function fetchJsonDirect(url, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutMs = clampNumber(Number(options.timeoutMs) || DEFAULT_FETCH_TIMEOUT_MS, 1000, 30000);
+  const timeoutMs = clampNumber(Number(options.timeoutMs) || DEFAULT_FETCH_TIMEOUT_MS, 1000, 600000);
   const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
@@ -575,22 +682,43 @@ async function loadPolymarketMarketUniverse(options = {}) {
   const pageSize = clampNumber(Number(options.pageSize) || 500, 200, 500);
   const maxPages = clampNumber(Number(options.maxPages) || 6, 1, 24);
 
-  const fetchPromises = Array.from({ length: maxPages }).map((_, page) => {
+  const aggregated = [];
+  for (let page = 0; page < maxPages && aggregated.length < targetLimit; page += 1) {
     const offset = page * pageSize;
-    const endpoint = `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false&limit=${pageSize}&offset=${offset}`;
-    return fetch(endpoint).then(res => res.json()).catch(() => []);
-  });
+    const endpoint =
+      `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false` +
+      `&limit=${Math.round(pageSize)}&offset=${Math.round(offset)}&order=volumeNum&ascending=false`;
 
-  const results = await Promise.all(fetchPromises);
-  
-  let aggregated = results.flat();
-  
-  if (aggregated.length > targetLimit) {
-      aggregated = aggregated.slice(0, targetLimit);
+    const payload = await fetchJsonWithExtensionSupport(endpoint, {
+      method: "GET",
+      timeoutMs: 10000
+    });
+    if (!Array.isArray(payload)) {
+      throw new Error("Polymarket payload is not an array.");
+    }
+
+    if (payload.length === 0) {
+      break;
+    }
+
+    aggregated.push(...payload);
+    if (payload.length < pageSize) {
+      break;
+    }
   }
 
-  setMarketUniverse(aggregated);
-  return { count: aggregated.length };
+  const dedupedRaw = dedupeMarketsById(aggregated);
+  const mapped = dedupedRaw
+    .map(mapPolymarketMarket)
+    .filter(Boolean)
+    .slice(0, targetLimit);
+
+  if (mapped.length < MIN_MARKETS_REQUIRED) {
+    throw new Error("Polymarket returned too few markets.");
+  }
+
+  setMarketUniverse(mapped);
+  return { source: "polymarket", count: mapped.length };
 }
 
 async function warmExpandedMarketUniverse(options = {}) {
@@ -812,4 +940,6 @@ if (typeof window !== "undefined") {
   window.warmExpandedMarketUniverse = warmExpandedMarketUniverse;
   window.getMarketUniverse = getMarketUniverse;
   window.getMarketById = getMarketById;
+  window.fetchJsonWithExtensionSupport = fetchJsonWithExtensionSupport;
+  window.runResearchThesisForTweet = runResearchThesisForTweet;
 }

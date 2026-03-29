@@ -1,0 +1,13 @@
+{
+  "name": "@instamarket/person4-risk-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node risk_daemon.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.100.1",
+    "dotenv": "^17.2.3"
+  }
+}

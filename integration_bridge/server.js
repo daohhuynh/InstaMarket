@@ -1,65 +1,51 @@
-require("dotenv").config();
+const path = require("path");
+const dotenv = require("dotenv");
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { Connection, PublicKey } = require("@solana/web3.js");
-const {
-  BedrockRuntimeClient,
-  ConverseCommand,
-} = require("@aws-sdk/client-bedrock-runtime");
-const personas = require("./personas.json");
+
+dotenv.config();
+dotenv.config({
+  path: path.resolve(__dirname, ".env.local"),
+  override: false,
+});
+dotenv.config({
+  path: path.resolve(__dirname, "../.env.local"),
+  override: false,
+});
 
 const app = express();
 app.use(cors()); // Crucial: Chrome Extensions will block requests without this
 app.use(express.json());
 
+const normalizeSupabaseUrl = (rawValue) => {
+  if (!rawValue) return null;
+  const value = rawValue.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^[a-z0-9-]+$/i.test(value)) return `https://${value}.supabase.co`;
+  return null;
+};
+
+const supabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL);
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("Missing Supabase configuration for integration_bridge.");
+  console.error("Set SUPABASE_URL and SUPABASE_ANON_KEY in integration_bridge/.env.");
+  console.error(
+    "SUPABASE_URL can be either https://<project>.supabase.co or just <project-ref>.",
+  );
+  process.exit(1);
+}
+
 // 1. Initialize Clients
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-);
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const solanaConnection = new Connection(
   process.env.SOLANA_RPC || "http://127.0.0.1:8899",
   "confirmed",
 );
-const bedrockClient = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || "us-east-1",
-});
-
-const NOVA_LITE_TIMEOUT_MS = Number(process.env.NOVA_LITE_TIMEOUT_MS) || 45_000;
-
-const activeSims = new Set();
-
-function parseMarketId(rawId) {
-  if (rawId === undefined || rawId === null) return null;
-  const parsed = parseInt(String(rawId).replace(/\D/g, ""), 10);
-  return (isNaN(parsed) || parsed <= 0) ? null : parsed;
-}
-
-function withTimeout(promise, ms, label) {
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label}: timed out after ${ms}ms`)),
-      ms,
-    );
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() =>
-    clearTimeout(timer),
-  );
-}
-
-function fallbackDecision(persona, reason) {
-  return {
-    id: persona.id,
-    name: persona.name,
-    type: persona.type,
-    decision: "NO",
-    shares: 5,
-    confidence: 50,
-    reasoning: reason || "Model call failed or timed out.",
-  };
-}
 
 // Helper: Generate fake keywords from titles so the Extension's tweet matcher works
 const generateKeywords = (title) => {
@@ -76,13 +62,9 @@ const generateKeywords = (title) => {
 // Handles the HUMAN user clicking "Bet YES" or "Bet NO" in the Chrome Extension
 app.post("/api/bet", async (req, res) => {
   try {
+    // Expected payload from Chrome Extension:
+    // { walletAddress, marketId, side, shares, price }
     const { walletAddress, marketId, side, shares, price } = req.body;
-
-    // FIX 2: Validate Market ID
-    const validMarketId = parseMarketId(marketId);
-    if (!validMarketId) {
-      return res.status(400).json({ error: "Invalid market ID" });
-    }
 
     // 1. Find the internal user ID mapped to this Solana wallet
     const { data: user, error: userErr } = await supabase
@@ -97,7 +79,7 @@ app.post("/api/bet", async (req, res) => {
     const { error: insertErr } = await supabase.from("positions").insert([
       {
         user_id: user.id,
-        market_id: validMarketId, // No more fallback
+        market_id: parseInt(marketId.replace(/\D/g, "")) || 1, // Strip 'm' from mock ids if present
         side: side,
         shares: shares,
         average_entry_price: price,
@@ -125,15 +107,11 @@ app.post("/api/save", async (req, res) => {
   try {
     const { walletAddress, marketId } = req.body;
 
-    const { data: user, error: userErr } = await supabase
+    const { data: user } = await supabase
       .from("users")
       .select("id")
       .eq("sol_wallet_address", walletAddress)
       .single();
-
-    if (userErr || !user) {
-      return res.status(404).json({ error: "User wallet not registered" });
-    }
 
     const { error } = await supabase.from("saved_markets_timeseries").insert([
       {
@@ -149,25 +127,30 @@ app.post("/api/save", async (req, res) => {
   }
 });
 // --- ENDPOINT: /api/portfolio ---
+// Merges Supabase positions and Solana on-chain balance for Person 3's MOCK_PORTFOLIO
 app.get("/api/portfolio/:walletAddress", async (req, res) => {
   try {
     const walletPubkey = new PublicKey(req.params.walletAddress);
 
-    // OPTIMIZATION: Fetch SOL balance and the User ID at the EXACT same time
-    const [balanceLamports, { data: user }] = await Promise.all([
-      solanaConnection.getBalance(walletPubkey),
-      supabase.from("users").select("id").eq("sol_wallet_address", req.params.walletAddress).single()
-    ]);
-
+    // 1. Get real SOL balance
+    const balanceLamports = await solanaConnection.getBalance(walletPubkey);
     const solBalance = balanceLamports / 1e9;
+
+    // 2. Get user's Postgres positions
+    const { data: users } = await supabase
+      .from("users")
+      .select("id")
+      .eq("sol_wallet_address", req.params.walletAddress)
+      .single();
     let openPositions = [];
 
-    // Only fetch positions if we successfully found a registered user
-    if (user) {
+    if (users) {
       const { data: positions } = await supabase
         .from("positions")
-        .select(`side, average_entry_price, shares, markets(title, current_yes_price)`)
-        .eq("user_id", user.id);
+        .select(
+          `side, average_entry_price, shares, markets(title, current_yes_price)`,
+        )
+        .eq("user_id", users.id);
 
       openPositions = (positions || []).map((p) => {
         const currentPrice =
@@ -180,7 +163,9 @@ app.get("/api/portfolio/:walletAddress", async (req, res) => {
           side: p.side,
           stake: p.average_entry_price * p.shares,
           pnl: pnl,
-          pnlPct: ((currentPrice - p.average_entry_price) / p.average_entry_price) * 100,
+          pnlPct:
+            ((currentPrice - p.average_entry_price) / p.average_entry_price) *
+            100,
           positive: pnl >= 0,
         };
       });

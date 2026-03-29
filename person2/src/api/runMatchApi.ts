@@ -1,9 +1,12 @@
 import cors from "cors";
-// @ts-ignore
 import { config as loadDotEnv } from "dotenv";
 import express, { type Request, type Response } from "express";
 import { existsSync, readFileSync } from "node:fs";
 import { BedrockNovaLiteModel } from "../bedrock/BedrockNovaLiteModel.js";
+import { HeuristicLocalModel } from "../bedrock/HeuristicLocalModel.js";
+import { ThesisEngine } from "../thesis/ThesisEngine.js";
+import { validateThesisRequest } from "../thesis/contracts.js";
+import { buildResearchDossierFromScrapers } from "../thesis/researchScraperRunner.js";
 
 interface CandidateMarket {
   id: string;
@@ -30,6 +33,41 @@ interface MatchMarketResponse {
   confidence_score: number;
   rationale: string;
   key_terms: string[];
+  model_mode: "bedrock" | "heuristic";
+}
+
+interface ResearchThesisResponse {
+  thesis: unknown;
+  dossier: {
+    report_id: string;
+    is_fallback: boolean;
+    source_counts: Record<string, number>;
+    briefing_lines: string[];
+    collection_errors: Array<{
+      source_type: string;
+      error: string;
+    }>;
+    top_sources: Array<{
+      source_type: string;
+      title: string;
+      url: string;
+      relevance_score: number;
+    }>;
+    all_sources: Array<{
+      id: string;
+      source_type: string;
+      provider: string;
+      query: string;
+      title: string;
+      url: string;
+      author: string;
+      published_at: string;
+      snippet: string;
+      raw_text: string;
+      relevance_score: number;
+      engagement: Record<string, number>;
+    }>;
+  };
   model_mode: "bedrock" | "heuristic";
 }
 
@@ -255,10 +293,11 @@ function normalizeCandidates(input: unknown): CandidateMarket[] {
 }
 
 async function main(): Promise<void> {
-  loadDotEnv({ path: ".env.local", quiet: true });
-  loadDotEnv({ quiet: true });
-  loadEnvFile(".env.local");
-  loadEnvFile(".env");
+  const envPaths = [".env.local", ".env", "../.env.local", "../.env"];
+  for (const envPath of envPaths) {
+    loadDotEnv({ path: envPath, quiet: true });
+    loadEnvFile(envPath);
+  }
 
   const port = parseInteger(process.env.AI_MATCH_API_PORT ?? process.env.API_PORT, 8787);
   const forceHeuristic = parseBoolean(process.env.API_FORCE_LOCAL_MODEL, false);
@@ -267,11 +306,12 @@ async function main(): Promise<void> {
   const allowAllOrigins = parseBoolean(process.env.AI_MATCH_ALLOW_ALL_ORIGINS, true);
 
   const model = !forceHeuristic && region ? new BedrockNovaLiteModel({ region, model_id: modelId }) : null;
+  const thesisEngine = new ThesisEngine(model ?? new HeuristicLocalModel());
   const app = express();
 
   app.use(
     cors({
-      origin: (_origin: any, callback: any) => {
+      origin: (_origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
         if (allowAllOrigins) {
           callback(null, true);
           return;
@@ -288,6 +328,7 @@ async function main(): Promise<void> {
     response.json({
       ok: true,
       model_mode: model ? "bedrock" : "heuristic",
+      endpoints: ["/v1/match-market", "/v1/research-thesis", "/health"],
       timestamp: new Date().toISOString(),
     });
   });
@@ -330,6 +371,76 @@ async function main(): Promise<void> {
       response.status(500).json({
         error: message,
       });
+    }
+  });
+
+  app.post("/v1/research-thesis", async (request: Request, response: Response) => {
+    try {
+      const body = request.body ?? {};
+      validateThesisRequest(body);
+
+      const dossier = await buildResearchDossierFromScrapers(body);
+      const thesis = await thesisEngine.buildThesis({
+        request: body,
+        dossier,
+      });
+
+      const topSources = [...dossier.sources]
+        .sort((left, right) => right.relevance_score - left.relevance_score)
+        .slice(0, 6)
+        .map((source) => ({
+          source_type: source.source_type,
+          title: source.title,
+          url: source.url,
+          relevance_score: source.relevance_score,
+        }));
+      const allSources = [...dossier.sources]
+        .sort((left, right) => right.relevance_score - left.relevance_score)
+        .map((source) => ({
+          id: source.id,
+          source_type: source.source_type,
+          provider: source.provider,
+          query: source.query,
+          title: source.title,
+          url: source.url,
+          author: source.author ?? "",
+          published_at: source.published_at ?? "",
+          snippet: source.snippet,
+          raw_text: source.raw_text,
+          relevance_score: source.relevance_score,
+          engagement: source.engagement ?? {},
+        }));
+
+      const payload: ResearchThesisResponse = {
+        thesis,
+        dossier: {
+          report_id: dossier.report_id,
+          is_fallback: dossier.report_id.startsWith("fallback-"),
+          briefing_lines: [...dossier.briefing_lines],
+          source_counts: {
+            x: Number(dossier.source_counts.x ?? 0),
+            youtube: Number(dossier.source_counts.youtube ?? 0),
+            reddit: Number(dossier.source_counts.reddit ?? 0),
+            news: Number(dossier.source_counts.news ?? 0),
+            google: Number(dossier.source_counts.google ?? 0),
+            tiktok: Number(dossier.source_counts.tiktok ?? 0),
+          },
+          collection_errors: Array.isArray(dossier.collection_errors)
+            ? dossier.collection_errors.map((entry) => ({
+                source_type: String(entry.source_type ?? "unknown"),
+                error: String(entry.error ?? "Unknown collection error."),
+              }))
+            : [],
+          top_sources: topSources,
+          all_sources: allSources,
+        },
+        model_mode: model ? "bedrock" : "heuristic",
+      };
+
+      response.json(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      response.status(400).json({ error: message });
     }
   });
 

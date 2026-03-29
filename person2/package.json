@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "tsx --test tests/**/*.test.ts",
     "simulate": "tsx src/cli/runSimulation.ts",
-    "match-api": "tsx src/api/runMatchApi.ts"
+    "match-api": "tsx src/api/runMatchApi.ts",
+    "verify-scrapers": "tsx scripts/verifyScraperSources.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.879.0",

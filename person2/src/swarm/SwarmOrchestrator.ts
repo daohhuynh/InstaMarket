@@ -1,5 +1,6 @@
 import type { LanguageModel } from "../bedrock/LanguageModel.js";
 import type { SwarmBuildInput, SwarmDecision } from "../contracts/person2Contracts.js";
+import type { ResearchDossier } from "../contracts/researchDossier.js";
 import type { AgentInsight, TradeSide } from "../contracts/sharedSchemas.js";
 import { validateAISwarmThesis } from "../contracts/sharedSchemas.js";
 import {
@@ -49,7 +50,7 @@ export class SwarmOrchestrator {
       max_tokens: 500,
     });
 
-    const normalizedResearch = normalizeResearch(research, input.comment.text);
+    const normalizedResearch = normalizeResearch(research, input.comment.text, input.research_dossier);
 
     const risk = await this.model.generateJson<RiskAgentOutput>({
       system_prompt: RISK_SYSTEM_PROMPT,
@@ -94,7 +95,7 @@ export class SwarmOrchestrator {
   }
 }
 
-function normalizeResearch(output: ResearchAgentOutput, fallbackText: string): ResearchAgentOutput {
+function normalizeResearch(output: ResearchAgentOutput, fallbackText: string, researchDossier?: ResearchDossier): ResearchAgentOutput {
   const safeSummary = safeString(output.summary, "No research summary generated.");
   const safeSignals = Array.isArray(output.signals)
     ? output.signals
@@ -111,6 +112,23 @@ function normalizeResearch(output: ResearchAgentOutput, fallbackText: string): R
     return {
       summary: safeSummary,
       signals: safeSignals,
+    };
+  }
+
+  const topExternalSource = researchDossier?.sources
+    ?.slice()
+    .sort((left, right) => right.relevance_score - left.relevance_score)[0];
+
+  if (topExternalSource) {
+    return {
+      summary: safeSummary,
+      signals: [
+        {
+          source: topExternalSource.source_type.toUpperCase(),
+          insight: safeString(topExternalSource.snippet || topExternalSource.raw_text, fallbackText).slice(0, 220),
+          confidence: clampNumber(Math.round(topExternalSource.relevance_score * 100), 0, 100, 65),
+        },
+      ],
     };
   }
 

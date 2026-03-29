@@ -6,6 +6,7 @@ import type {
   SwarmBuildInput,
   SwarmDecision,
 } from "../contracts/person2Contracts.js";
+import type { ResearchDossier } from "../contracts/researchDossier.js";
 import type { MarketState, TradeExecution } from "../contracts/sharedSchemas.js";
 import { validateTradeExecution } from "../contracts/sharedSchemas.js";
 import { mapWithConcurrency } from "../util/concurrency.js";
@@ -24,6 +25,7 @@ export interface SimulationRequest {
   post_url: string;
   market_state: MarketState;
   submit_to_clob: boolean;
+  research_dossier?: ResearchDossier;
 }
 
 const DEFAULT_CONFIG: PersonaSimulationConfig = {
@@ -63,6 +65,7 @@ export class PersonaTradeSimulator {
           market_state: request.market_state,
           comment,
           persona,
+          research_dossier: request.research_dossier,
         };
 
         const decision = await this.deps.swarm_orchestrator.buildDecision(buildInput);

@@ -3,6 +3,7 @@ node_modules/
 
 # Secrets and environments
 .env
+.env.local
 
 # Compiled C++ binaries
 clob_engine
@@ -13,3 +14,7 @@ test-ledger/
 
 # macOS junk
 .DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
