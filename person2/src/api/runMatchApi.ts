@@ -32,6 +32,21 @@ interface MatchMarketResponse {
   model_mode: "bedrock" | "heuristic";
 }
 
+interface ExtractMarketQueryRequest {
+  tweet_text: string;
+  parser_queries?: string[];
+  max_queries?: number;
+  tweet_tokens?: string[];
+  search_zero_hits?: boolean;
+}
+
+interface ExtractMarketQueryResponse {
+  queries: string[];
+  key_terms: string[];
+  rationale: string;
+  model_mode: "bedrock" | "heuristic";
+}
+
 function loadEnvFile(fileName: string): void {
   if (!existsSync(fileName)) {
     return;
@@ -102,6 +117,20 @@ function tokenize(text: string): string[] {
     .trim()
     .split(" ")
     .filter((token) => token.length > 2);
+}
+
+function uniqueNonEmpty(values: string[], maxItems = 8): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, maxItems);
+}
+
+function sanitizeQueryText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[^a-z0-9\s:$.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
 }
 
 function heuristicMatch(tweetText: string, candidates: CandidateMarket[]): MatchMarketResponse {
@@ -224,6 +253,103 @@ async function bedrockMatch(
   };
 }
 
+function heuristicExtractMarketQueries(
+  tweetText: string,
+  parserQueries: string[],
+  maxQueries: number,
+  tweetTokens: string[],
+  searchZeroHits: boolean,
+): ExtractMarketQueryResponse {
+  const tokens = uniqueNonEmpty([...tweetTokens, ...tokenize(tweetText)], 24);
+  if (tokens.length === 0) {
+    return {
+      queries: uniqueNonEmpty(parserQueries.map(sanitizeQueryText), maxQueries),
+      key_terms: [],
+      rationale: "No useful tokens extracted from tweet; returning parser queries.",
+      model_mode: "heuristic",
+    };
+  }
+
+  const keyTerms = uniqueNonEmpty(tokens.filter((token) => token.length >= 4), 10);
+  const tokenQuery = sanitizeQueryText(keyTerms.slice(0, 6).join(" "));
+  const phraseQuery = sanitizeQueryText(keyTerms.slice(0, 3).join(" "));
+  const broadQuery = sanitizeQueryText(keyTerms.slice(0, 2).join(" "));
+  const rescueQuery = searchZeroHits ? sanitizeQueryText(keyTerms.slice(0, 1).join(" ")) : "";
+  const queries = uniqueNonEmpty(
+    [tokenQuery, phraseQuery, broadQuery, rescueQuery, ...parserQueries.map(sanitizeQueryText)],
+    maxQueries,
+  );
+
+  return {
+    queries,
+    key_terms: keyTerms,
+    rationale: searchZeroHits
+      ? "Heuristic extraction used broader fallback queries after zero-result signal."
+      : "Heuristic extraction prioritized high-length tokens and parser query fallback.",
+    model_mode: "heuristic",
+  };
+}
+
+async function bedrockExtractMarketQueries(
+  model: BedrockNovaLiteModel,
+  tweetText: string,
+  parserQueries: string[],
+  maxQueries: number,
+  tweetTokens: string[],
+  searchZeroHits: boolean,
+): Promise<ExtractMarketQueryResponse> {
+  const compactTokens = uniqueNonEmpty(tweetTokens.map(sanitizeQueryText), 20);
+  const result = await model.generateJson<Partial<ExtractMarketQueryResponse>>({
+    system_prompt:
+      "You generate Polymarket public-search queries from a tweet. " +
+      "Return concise, concrete queries that can match existing market titles. " +
+      "Avoid filler words, stopwords, and made-up stems. Prefer entity names, event names, and time anchors.",
+    user_prompt: JSON.stringify(
+      {
+        task: "Generate high-recall Polymarket search queries for this tweet.",
+        tweet_text: tweetText,
+        tweet_tokens: compactTokens,
+        parser_queries: parserQueries,
+        max_queries: maxQueries,
+        search_zero_hits: searchZeroHits,
+        format_rules: [
+          "Return 2-3 specific queries and 1-2 broader backup queries.",
+          "Each query should be 2-7 words.",
+          "No punctuation-heavy text. No URL fragments.",
+          "If search_zero_hits=true, broaden queries while keeping the same topic/entity."
+        ]
+      },
+      null,
+      2,
+    ),
+    json_schema_hint:
+      '{"queries":["string"],"key_terms":["string"],"rationale":"string"}',
+    temperature: 0.1,
+    max_tokens: 180,
+  });
+
+  const rawQueries = Array.isArray(result.queries) ? result.queries.map(String) : [];
+  const rawTerms = Array.isArray(result.key_terms) ? result.key_terms.map(String) : [];
+  const parserFallback = uniqueNonEmpty(parserQueries.map(sanitizeQueryText), maxQueries);
+  const queries = uniqueNonEmpty(
+    rawQueries
+      .map((query) => sanitizeQueryText(query))
+      .filter((query) => query.length >= 3 && query.length <= 120)
+      .filter((query) => query.split(" ").length >= 2),
+    maxQueries,
+  );
+
+  return {
+    queries: queries.length > 0 ? queries : parserFallback,
+    key_terms: uniqueNonEmpty(rawTerms.map((term) => sanitizeQueryText(term)), 10),
+    rationale:
+      typeof result.rationale === "string" && result.rationale.trim().length > 0
+        ? result.rationale
+        : "Generated Bedrock query candidates for Polymarket search.",
+    model_mode: "bedrock",
+  };
+}
+
 function normalizeCandidates(input: unknown): CandidateMarket[] {
   if (!Array.isArray(input)) {
     return [];
@@ -324,6 +450,37 @@ async function main(): Promise<void> {
           : aiResult;
 
       response.json(effectiveResult);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      response.status(500).json({
+        error: message,
+      });
+    }
+  });
+
+  app.post("/v1/extract-market-query", async (request: Request, response: Response) => {
+    try {
+      const body = (request.body ?? {}) as Partial<ExtractMarketQueryRequest>;
+      const tweetText = typeof body.tweet_text === "string" ? body.tweet_text.trim() : "";
+      if (!tweetText) {
+        response.status(400).json({ error: "tweet_text is required." });
+        return;
+      }
+
+      const parserQueries = Array.isArray(body.parser_queries)
+        ? body.parser_queries.map(String).map((value) => value.trim()).filter((value) => value.length > 0).slice(0, 8)
+        : [];
+      const tweetTokens = Array.isArray(body.tweet_tokens)
+        ? body.tweet_tokens.map(String).map((value) => value.trim()).filter((value) => value.length > 1).slice(0, 32)
+        : [];
+      const searchZeroHits = Boolean(body.search_zero_hits);
+      const maxQueries = clamp(parseInteger(body.max_queries, 5), 1, 8);
+
+      const result = model
+        ? await bedrockExtractMarketQueries(model, tweetText, parserQueries, maxQueries, tweetTokens, searchZeroHits)
+        : heuristicExtractMarketQueries(tweetText, parserQueries, maxQueries, tweetTokens, searchZeroHits);
+
+      response.json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       response.status(500).json({

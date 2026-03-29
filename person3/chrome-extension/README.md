@@ -41,6 +41,7 @@ Live market matching lives in **`src/content/data.js`**:
 - `findBestMarketForTweet(tweetText)` scores each tweet against the live market universe (no AWS).
 - `buildResearchSummary(...)` feeds the Research card in the sidebar.
 - Cross-origin market fetches are routed through `src/background/worker.js` to avoid `x.com` CORS failures.
+- Loader resiliency: retries + fallback to `events` endpoint + cached market universe fallback.
 
 ### Bedrock rerank (first 5 tweets per refresh)
 - `findBestMarketForTweetWithAi(tweetText)` uses parser candidates first.

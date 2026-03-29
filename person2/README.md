@@ -78,7 +78,20 @@ npm run match-api
 
 Endpoint:
 - `POST /v1/match-market`
+- `POST /v1/extract-market-query` (optional query enhancer for better Polymarket search terms)
 - Default URL: `http://localhost:8787/v1/match-market`
+
+Example:
+
+```bash
+curl -X POST http://localhost:8787/v1/extract-market-query \
+  -H "content-type: application/json" \
+  -d '{
+    "tweet_text":"Unitree robots are being used in hospitals more often now",
+    "parser_queries":["unitree robots hospitals"],
+    "max_queries":5
+  }'
+```
 
 Health check:
 

@@ -6,13 +6,27 @@
   'use strict';
 
   let sidebarMounted = false;
+  let tweetObserverStarted = false;
+  let routeHooksInstalled = false;
+  let initialScanIntervalId = null;
+  let lastKnownUrl = '';
+  let marketUniverseHydrated = false;
 
   // ── Wait for DOM ready ──────────────────────────────────
-  async function init() {
+  function init() {
     mountSidebar();
     mountDittoButton();
-    await hydrateMarketUniverse();
     observeTweets();
+    primeInitialTweetScan();
+    installRouteHooks();
+    hydrateMarketUniverse()
+      .then(isHydrated => {
+        marketUniverseHydrated = Boolean(isHydrated);
+        kickPostHydrationRescan();
+      })
+      .catch(error => {
+        console.warn('[InstaMarket] Initial market hydration failed:', error);
+      });
   }
 
   // ── Sidebar ─────────────────────────────────────────────
@@ -123,118 +137,292 @@
   }
 
   // ── Tweet observation ────────────────────────────────────
-  function observeTweets() {
-    const observer = new MutationObserver(() => {
-      document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(tweet => {
-        injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    // Also run immediately on existing tweets
-    document.querySelectorAll('article[data-testid="tweet"]').forEach(tweet => {
+  function scanTweetsForInjection() {
+    document.querySelectorAll('article[data-testid="tweet"]:not([data-im-processing]):not([data-im-injected="true"])').forEach(tweet => {
       injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
     });
   }
 
-  async function injectTweetLayer(tweet) {
-    tweet.setAttribute('data-im-injected', 'true');
+  function observeTweets() {
+    if (tweetObserverStarted) return;
+    tweetObserverStarted = true;
 
-    const tweetText = tweet.innerText;
-    const match = await findBestMarketForTweetWithAi(tweetText);
-    if (!match) return;
-    const market = match.market;
-    const researchSummary = buildResearchSummary(tweetText, match);
-    persistResearch(market.id, researchSummary);
-    const safeQuestion = escapeHtml(market.question);
-    const safeVolume = escapeHtml(market.volume || '$0 Vol');
-    const safeMarketId = escapeHtml(String(market.id));
-    const safeMarketUrl = escapeHtml(market.polymarketUrl || '');
+    const observer = new MutationObserver(() => {
+      scanTweetsForInjection();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    scanTweetsForInjection();
+  }
 
-    const layer = document.createElement('div');
-    layer.className = 'im-tweet-layer';
-    layer.innerHTML = `
-      <div class="im-market-question">
-        Market: <span>${safeQuestion}</span>
-        <span class="im-match-confidence">· ${match.confidence}% ${match.source === 'aws-bedrock' ? 'AI' : 'parser'} match</span>
-      </div>
-      <div class="im-tweet-actions">
-        <div class="im-odds-pill">
-          <span class="im-yes-pct">YES ${market.yesOdds}%</span>
-          <span class="im-sep">|</span>
-          <span class="im-no-pct">NO ${market.noOdds}%</span>
-          <span class="im-sep">·</span>
-          <span class="im-vol">${safeVolume}</span>
-        </div>
-        <button class="im-bet-yes" data-market="${safeMarketId}" data-side="YES">
-          <span class="im-arrow-up"></span> YES
-        </button>
-        <button class="im-bet-no" data-market="${safeMarketId}" data-side="NO">
-          <span class="im-arrow-down"></span> NO
-        </button>
-        <button class="im-save-btn" data-market="${safeMarketId}">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-          </svg>
-          Save
-        </button>
-        <button class="im-research-btn" data-market="${safeMarketId}">
-          Research
-        </button>
-        <div class="im-pm-link" title="View on Polymarket" data-market-url="${safeMarketUrl}">
-          <svg class="im-pm-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none"/>
-          </svg>
-        </div>
-      </div>
-    `;
+  function primeInitialTweetScan() {
+    if (initialScanIntervalId) {
+      clearInterval(initialScanIntervalId);
+      initialScanIntervalId = null;
+    }
 
-    // Bet buttons → instant bet + show markets sidebar
-    layer.querySelectorAll('.im-bet-yes, .im-bet-no').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const side = btn.dataset.side;
-        const mId = btn.dataset.market;
-        showToast(`Bet placed: ${side} on "${market.question.slice(0, 40)}…" ✓`);
-        if (typeof window.recordSidebarBet === 'function') {
-          window.recordSidebarBet(mId, side);
-        }
-        persistResearch(mId, researchSummary);
-        switchSidebarToMarkets(mId);
-      });
+    let attempts = 0;
+    const maxAttempts = 120; // ~36s at 300ms
+    scanTweetsForInjection();
+
+    initialScanIntervalId = setInterval(() => {
+      attempts += 1;
+      scanTweetsForInjection();
+      if (attempts >= maxAttempts) {
+        clearInterval(initialScanIntervalId);
+        initialScanIntervalId = null;
+      }
+    }, 300);
+  }
+
+  function clearNoMatchMarkers() {
+    document.querySelectorAll('article[data-testid="tweet"][data-im-injected="nomatch"]').forEach(tweet => {
+      tweet.removeAttribute('data-im-injected');
+    });
+  }
+
+  function kickPostHydrationRescan() {
+    clearNoMatchMarkers();
+    scanTweetsForInjection();
+    setTimeout(scanTweetsForInjection, 800);
+    setTimeout(scanTweetsForInjection, 2500);
+  }
+
+  function installRouteHooks() {
+    if (routeHooksInstalled) return;
+    routeHooksInstalled = true;
+    lastKnownUrl = window.location.href;
+
+    const handleRouteChange = () => {
+      const currentUrl = window.location.href;
+      if (currentUrl === lastKnownUrl) return;
+      lastKnownUrl = currentUrl;
+
+      scanTweetsForInjection();
+      primeInitialTweetScan();
+      hydrateMarketUniverse()
+        .then(isHydrated => {
+          marketUniverseHydrated = marketUniverseHydrated || Boolean(isHydrated);
+          if (isHydrated) {
+            kickPostHydrationRescan();
+          }
+        })
+        .catch(() => {
+          // Ignore route hydration failures, existing data is still usable.
+        });
+    };
+
+    const originalPushState = history.pushState;
+    history.pushState = function patchedPushState(...args) {
+      const result = originalPushState.apply(this, args);
+      setTimeout(handleRouteChange, 0);
+      return result;
+    };
+
+    const originalReplaceState = history.replaceState;
+    history.replaceState = function patchedReplaceState(...args) {
+      const result = originalReplaceState.apply(this, args);
+      setTimeout(handleRouteChange, 0);
+      return result;
+    };
+
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('focus', scanTweetsForInjection);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        scanTweetsForInjection();
+      }
+    });
+  }
+
+  function isLikelyPromotedTweet(tweet) {
+    if (!tweet) return false;
+
+    if (tweet.querySelector('[aria-label="Promoted"], [aria-label="Ad"], [data-testid="placementTracking"]')) {
+      return true;
+    }
+
+    const spanTexts = [...tweet.querySelectorAll('span')]
+      .slice(0, 140)
+      .map(node => String(node.textContent || '').trim().toLowerCase())
+      .filter(Boolean);
+
+    if (spanTexts.includes('ad') || spanTexts.includes('promoted')) {
+      return true;
+    }
+
+    const firstLines = String(tweet.innerText || '')
+      .split('\n')
+      .slice(0, 12)
+      .map(line => line.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (firstLines.includes('ad') || firstLines.includes('promoted')) {
+      return true;
+    }
+
+    const compactHeader = firstLines.slice(0, 4).join(' ');
+    if (/\bpromoted\b/.test(compactHeader)) {
+      return true;
+    }
+
+    return /^ad\b/.test(compactHeader);
+  }
+
+  function extractPrimaryTweetText(tweet) {
+    if (!tweet) return '';
+
+    const cloned = tweet.cloneNode(true);
+
+    // Remove nested quoted tweets; keep only the outer tweet text context.
+    cloned.querySelectorAll('article[data-testid="tweet"]').forEach(node => {
+      node.remove();
     });
 
-    layer.querySelector('.im-save-btn').addEventListener('click', e => {
-      e.stopPropagation();
-      if (typeof window.saveMarketForLater === 'function') {
-        const saved = window.saveMarketForLater(market.id);
-        showToast(saved ? `Saved: "${market.question.slice(0, 40)}…" ✓` : 'Already saved.');
+    // Remove rich card text and promoted/ad badges that pollute matching.
+    cloned.querySelectorAll('[data-testid="card.wrapper"], [aria-label="Ad"], [aria-label="Promoted"]').forEach(node => {
+      node.remove();
+    });
+
+    const tweetTextNodes = [...cloned.querySelectorAll('[data-testid="tweetText"]')];
+    const primary = tweetTextNodes[0];
+    if (primary && typeof primary.innerText === 'string') {
+      return sanitizeText(primary.innerText);
+    }
+
+    const fallback = sanitizeText(cloned.innerText || '');
+    return fallback;
+  }
+
+  function sanitizeText(value) {
+    return String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  async function injectTweetLayer(tweet) {
+    if (!tweet || tweet.getAttribute('data-im-processing') === 'true') {
+      return;
+    }
+    tweet.setAttribute('data-im-processing', 'true');
+
+    try {
+      if (isLikelyPromotedTweet(tweet)) {
+        tweet.setAttribute('data-im-injected', 'true');
         return;
       }
-      showToast(`Saved: "${market.question.slice(0, 40)}…" ✓`);
-    });
 
-    layer.querySelector('.im-research-btn').addEventListener('click', e => {
-      e.stopPropagation();
-      persistResearch(market.id, researchSummary);
-      showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
-      switchSidebarToMarkets(market.id);
-    });
-
-    const pmLink = layer.querySelector('.im-pm-link');
-    pmLink?.addEventListener('click', e => {
-      e.stopPropagation();
-      const targetUrl = pmLink.getAttribute('data-market-url');
-      if (targetUrl) {
-        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      const tweetText = extractPrimaryTweetText(tweet);
+      if (!tweetText || tweetText.length < 10) {
+        tweet.setAttribute('data-im-injected', 'true');
+        return;
       }
-    });
+      const match = await findBestMarketForTweetWithAi(tweetText);
+      if (!match) {
+        tweet.setAttribute('data-im-injected', 'nomatch');
+        setTimeout(() => {
+          if (tweet.getAttribute('data-im-injected') === 'nomatch') {
+            tweet.removeAttribute('data-im-injected');
+          }
+        }, marketUniverseHydrated ? 12000 : 2500);
+        return;
+      }
+      const market = match.market;
+      const researchSummary = buildResearchSummary(tweetText, match);
+      persistResearch(market.id, researchSummary);
+      const safeQuestion = escapeHtml(market.question);
+      const safeVolume = escapeHtml(market.volume || '$0 Vol');
+      const safeMarketId = escapeHtml(String(market.id));
+      const safeMarketUrl = escapeHtml(market.polymarketUrl || '');
 
-    // Insert after the tweet's action row
-    const actionRow = tweet.querySelector('[role="group"]');
-    if (actionRow && actionRow.parentNode) {
-      actionRow.parentNode.insertBefore(layer, actionRow.nextSibling);
-    } else {
-      tweet.appendChild(layer);
+      const layer = document.createElement('div');
+      layer.className = 'im-tweet-layer';
+      layer.innerHTML = `
+        <div class="im-market-question">
+          Market: <span>${safeQuestion}</span>
+          <span class="im-match-confidence">· ${match.confidence}% ${match.source === 'aws-bedrock' ? 'AI' : 'parser'} match</span>
+        </div>
+        <div class="im-tweet-actions">
+          <div class="im-odds-pill">
+            <span class="im-yes-pct">YES ${market.yesOdds}%</span>
+            <span class="im-sep">|</span>
+            <span class="im-no-pct">NO ${market.noOdds}%</span>
+            <span class="im-sep">·</span>
+            <span class="im-vol">${safeVolume}</span>
+          </div>
+          <button class="im-bet-yes" data-market="${safeMarketId}" data-side="YES">
+            <span class="im-arrow-up"></span> YES
+          </button>
+          <button class="im-bet-no" data-market="${safeMarketId}" data-side="NO">
+            <span class="im-arrow-down"></span> NO
+          </button>
+          <button class="im-save-btn" data-market="${safeMarketId}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+            </svg>
+            Save
+          </button>
+          <button class="im-research-btn" data-market="${safeMarketId}">
+            Research
+          </button>
+          <div class="im-pm-link" title="View on Polymarket" data-market-url="${safeMarketUrl}">
+            <svg class="im-pm-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none"/>
+            </svg>
+          </div>
+        </div>
+      `;
+
+      // Bet buttons → instant bet + show markets sidebar
+      layer.querySelectorAll('.im-bet-yes, .im-bet-no').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const side = btn.dataset.side;
+          const mId = btn.dataset.market;
+          showToast(`Bet placed: ${side} on "${market.question.slice(0, 40)}…" ✓`);
+          if (typeof window.recordSidebarBet === 'function') {
+            window.recordSidebarBet(mId, side);
+          }
+          persistResearch(mId, researchSummary);
+          switchSidebarToMarkets(mId);
+        });
+      });
+
+      layer.querySelector('.im-save-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        if (typeof window.saveMarketForLater === 'function') {
+          const saved = window.saveMarketForLater(market.id);
+          showToast(saved ? `Saved: "${market.question.slice(0, 40)}…" ✓` : 'Already saved.');
+          return;
+        }
+        showToast(`Saved: "${market.question.slice(0, 40)}…" ✓`);
+      });
+
+      layer.querySelector('.im-research-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        persistResearch(market.id, researchSummary);
+        showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
+        switchSidebarToMarkets(market.id);
+      });
+
+      const pmLink = layer.querySelector('.im-pm-link');
+      pmLink?.addEventListener('click', e => {
+        e.stopPropagation();
+        const targetUrl = pmLink.getAttribute('data-market-url');
+        if (targetUrl) {
+          window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        }
+      });
+
+      // Insert after the tweet's action row
+      const actionRow = tweet.querySelector('[role="group"]');
+      if (actionRow && actionRow.parentNode) {
+        actionRow.parentNode.insertBefore(layer, actionRow.nextSibling);
+      } else {
+        tweet.appendChild(layer);
+      }
+      tweet.setAttribute('data-im-injected', 'true');
+    } finally {
+      tweet.removeAttribute('data-im-processing');
     }
   }
 
@@ -255,7 +443,7 @@
 
   async function hydrateMarketUniverse() {
     if (typeof loadPolymarketMarketUniverse !== 'function') {
-      return;
+      return false;
     }
     try {
       const result = await loadPolymarketMarketUniverse({ limit: 4500, pageSize: 500, maxPages: 10 });
@@ -275,18 +463,28 @@
             // Ignore expansion errors; base universe is already loaded.
           });
       }
+      return Boolean(result?.count);
     } catch (error) {
       console.warn('[InstaMarket] Unable to load live Polymarket markets:', error);
+      return false;
     }
   }
 
   // ── Boot ─────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      init().catch(error => console.error('[InstaMarket] Init failed:', error));
+      try {
+        init();
+      } catch (error) {
+        console.error('[InstaMarket] Init failed:', error);
+      }
     });
   } else {
-    init().catch(error => console.error('[InstaMarket] Init failed:', error));
+    try {
+      init();
+    } catch (error) {
+      console.error('[InstaMarket] Init failed:', error);
+    }
   }
 
 })();
