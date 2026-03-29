@@ -10,6 +10,7 @@ const IM_MAX_BET_LOG = 250;
 const IM_PERSISTENT_KEYS = [IM_SAVED_MARKETS_KEY, IM_BET_LOG_KEY];
 
 let IM_ACTIVE_MARKET_ID = null;
+const IM_RELATED_MARKETS_LIMIT = 24;
 let IM_STORAGE_SYNC_INITIALIZED = false;
 let IM_STORAGE_CHANGE_LISTENER_BOUND = false;
 const IM_STORAGE_MEMORY = Object.create(null);
@@ -63,27 +64,29 @@ function renderPortfolioTab() {
     );
   }
 
+  const yesSpend = betLog
+    .filter(entry => entry.side === 'YES')
+    .reduce((sum, entry) => sum + toUsdAmount(entry.amount), 0);
+  const noSpend = betLog
+    .filter(entry => entry.side === 'NO')
+    .reduce((sum, entry) => sum + toUsdAmount(entry.amount), 0);
   const yesCount = betLog.filter(entry => entry.side === 'YES').length;
   const noCount = betLog.filter(entry => entry.side === 'NO').length;
-  const uniqueMarkets = new Set(betLog.map(entry => entry.marketId)).size;
   const recent = [...betLog].slice(-12).reverse();
 
   return `
     <div class="im-portfolio-header">
-      <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Live Portfolio Activity</div>
-      <div class="im-portfolio-value">${betLog.length} Bets</div>
+      <div class="im-portfolio-kicker">Portfolio Activity</div>
       <div class="im-portfolio-stats">
         <div class="im-stat-box">
-          <div class="im-stat-label">YES Bets</div>
-          <div class="im-stat-val green">${yesCount}</div>
+          <div class="im-stat-label">On YES</div>
+          <div class="im-stat-val green">${formatUsd(yesSpend)}</div>
+          <div class="im-stat-sub">${yesCount} bet${yesCount === 1 ? '' : 's'}</div>
         </div>
         <div class="im-stat-box">
-          <div class="im-stat-label">NO Bets</div>
-          <div class="im-stat-val red">${noCount}</div>
-        </div>
-        <div class="im-stat-box">
-          <div class="im-stat-label">Markets</div>
-          <div class="im-stat-val">${uniqueMarkets}</div>
+          <div class="im-stat-label">On NO</div>
+          <div class="im-stat-val red">${formatUsd(noSpend)}</div>
+          <div class="im-stat-sub">${noCount} bet${noCount === 1 ? '' : 's'}</div>
         </div>
       </div>
     </div>
@@ -94,6 +97,17 @@ function renderPortfolioTab() {
     <div class="im-section-header">Research</div>
     ${renderPortfolioResearchSection()}
   `;
+}
+
+function toUsdAmount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return parsed;
+}
+
+function formatUsd(value) {
+  const amount = Math.max(0, Number(value) || 0);
+  return `$${Math.round(amount).toLocaleString('en-US')}`;
 }
 
 function renderBetRow(entry) {
@@ -149,11 +163,12 @@ function renderMarketsTab(activeMarketId) {
   }
 
   const related = buildRelatedMarkets(primary, markets);
+  const relatedHeader = `Related Markets${related.length ? ` (${related.length})` : ''}`;
 
   return `
     ${renderMarketCard(primary, true)}
 
-    <div class="im-section-header">Related Markets</div>
+    <div class="im-section-header">${relatedHeader}</div>
     ${related.length ? related.map(market => renderMarketCard(market, false)).join('') : renderEmptyPanel('No related markets', 'No nearby related market found for this topic.')}
 
     <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
@@ -188,31 +203,56 @@ function resolvePrimaryMarket(markets, activeMarketId) {
 
 function buildRelatedMarkets(primary, markets) {
   if (!primary || !Array.isArray(markets)) return [];
+  const primaryId = String(primary.id);
+  const byId = new Map(markets.map(market => [String(market.id), market]));
+  const scored = new Map();
+
+  function pushCandidate(market, baseScore, overlapBonus = 0) {
+    if (!market) return;
+    const marketId = String(market.id);
+    if (!marketId || marketId === primaryId) return;
+
+    const score = Number(baseScore || 0) + Number(overlapBonus || 0);
+    const previous = scored.get(marketId);
+    if (!previous || score > previous.score) {
+      scored.set(marketId, { market, score });
+    }
+  }
 
   if (Array.isArray(primary.relatedMarkets) && primary.relatedMarkets.length > 0) {
-    const byId = new Map(markets.map(market => [String(market.id), market]));
-    return primary.relatedMarkets
-      .map(id => byId.get(String(id)))
-      .filter(Boolean)
-      .slice(0, 4);
+    primary.relatedMarkets.forEach((id, index) => {
+      const market = byId.get(String(id));
+      pushCandidate(market, 200 - index);
+    });
   }
 
-  const sameCategory = markets.filter(market =>
-    market.id !== primary.id && market.category && primary.category && market.category === primary.category
-  );
-  if (sameCategory.length > 0) {
-    return sameCategory.slice(0, 4);
+  const primaryCategory = String(primary.category || '').trim().toLowerCase();
+  const sameCategory = primaryCategory
+    ? markets.filter(market => String(market.id) !== primaryId && String(market.category || '').trim().toLowerCase() === primaryCategory)
+    : [];
+
+  for (const market of sameCategory) {
+    const overlap = lexicalOverlap(primary.question, market.question);
+    if (overlap <= 0) continue;
+    pushCandidate(market, 100, overlap);
   }
 
-  const lexical = markets
-    .filter(market => market.id !== primary.id)
-    .map(market => ({ market, score: lexicalOverlap(primary.question, market.question) }))
-    .filter(item => item.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 4)
-    .map(item => item.market);
+  for (const market of markets) {
+    if (String(market.id) === primaryId) continue;
+    const overlap = lexicalOverlap(primary.question, market.question);
+    if (overlap <= 0) continue;
+    pushCandidate(market, 20, overlap);
+  }
 
-  return lexical;
+  return Array.from(scored.values())
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      const volumeDelta = parseVolumeForSort(right.market?.volume) - parseVolumeForSort(left.market?.volume);
+      if (volumeDelta !== 0) return volumeDelta;
+      return String(left.market?.question || '').localeCompare(String(right.market?.question || ''));
+    })
+    .slice(0, IM_RELATED_MARKETS_LIMIT)
+    .map(entry => entry.market);
 }
 
 function lexicalOverlap(leftText, rightText) {
@@ -225,6 +265,20 @@ function lexicalOverlap(leftText, rightText) {
     if (right.has(token)) overlap += 1;
   }
   return overlap;
+}
+
+function parseVolumeForSort(volumeLabel) {
+  const raw = String(volumeLabel || '').toUpperCase().replaceAll(',', '').trim();
+  if (!raw) return 0;
+  const match = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*([KMB])?/);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return 0;
+  const suffix = match[2] || '';
+  if (suffix === 'B') return value * 1_000_000_000;
+  if (suffix === 'M') return value * 1_000_000;
+  if (suffix === 'K') return value * 1_000;
+  return value;
 }
 
 function renderResearchCard(research) {
@@ -1559,18 +1613,29 @@ function switchSidebarToMarkets(marketId) {
   document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
   document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
 
-  // Markets tab has been removed; route to Portfolio to keep existing
-  // tweet-card navigation actions stable.
-  const portfolioTab = document.querySelector('.im-tab[data-tab="portfolio"]');
-  const portfolioContent = document.getElementById('im-tab-portfolio');
+  const marketsTab = document.querySelector('.im-tab[data-tab="markets"]');
+  const marketsContent = document.getElementById('im-tab-markets');
 
-  if (portfolioTab) {
-    portfolioTab.classList.add('active');
+  if (marketsTab) {
+    marketsTab.classList.add('active');
   }
 
-  if (portfolioContent) {
-    portfolioContent.classList.add('active');
-    portfolioContent.innerHTML = renderPortfolioTab();
+  if (marketsContent) {
+    marketsContent.classList.add('active');
+    marketsContent.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
+  }
+}
+
+function setSidebarActiveMarketFromViewport(marketId) {
+  const normalizedId = String(marketId || '').trim();
+  if (!normalizedId || normalizedId === String(IM_ACTIVE_MARKET_ID || '')) {
+    return;
+  }
+
+  IM_ACTIVE_MARKET_ID = normalizedId;
+  const marketsContent = document.getElementById('im-tab-markets');
+  if (marketsContent && marketsContent.classList.contains('active')) {
+    marketsContent.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
   }
 }
 
@@ -1599,6 +1664,7 @@ function switchSidebarToSaved() {
 window.setMarketResearch = setMarketResearch;
 window.rerenderPortfolioTabIfVisible = rerenderPortfolioTabIfVisible;
 window.switchSidebarToMarkets = switchSidebarToMarkets;
+window.setSidebarActiveMarketFromViewport = setSidebarActiveMarketFromViewport;
 window.switchSidebarToSaved = switchSidebarToSaved;
 window.saveMarketForLater = saveMarketForLater;
 window.recordSidebarBet = recordSidebarBet;

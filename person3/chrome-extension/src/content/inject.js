@@ -9,14 +9,18 @@
   const IM_TRADE_AMOUNT_MIN = 1;
   const IM_TRADE_AMOUNT_MAX = 1000;
   const IM_TRADE_AMOUNT_DEFAULT = 250;
+  const imTweetMarketMap = new Map();
+  let imViewportSyncRaf = 0;
+  let imLastViewportMarketId = '';
 
   // â”€â”€ Wait for DOM ready â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function init() {
     mountSidebar();
-    mountDittoButton();
     await hydrateMarketUniverse();
     observeTweets();
     window.addEventListener('resize', syncAllTweetLayerAlignments);
+    window.addEventListener('scroll', requestViewportMarketSync, { passive: true });
+    window.addEventListener('resize', requestViewportMarketSync);
   }
 
   // â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -64,180 +68,6 @@
       collapsed ? 'Expand InstaMarket sidebar' : 'Collapse InstaMarket sidebar'
     );
     if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
-    // Show Ditto only when sidebar is collapsed
-    updateDittoVisibility();
-  }
-
-  function updateDittoVisibility() {
-    const sidebar = document.getElementById('im-sidebar');
-    const btn = document.getElementById('im-ditto-btn');
-    if (!btn || !sidebar) return;
-    const sidebarOpen = !sidebar.classList.contains('im-collapsed');
-    btn.classList.toggle('im-hidden', sidebarOpen);
-  }
-
-  function watchSidebarForDitto() {
-    const sidebar = document.getElementById('im-sidebar');
-    if (!sidebar) return;
-    new MutationObserver(() => updateDittoVisibility())
-      .observe(sidebar, { attributes: true, attributeFilter: ['class'] });
-  }
-
-  function alignDittoToTwitterButtons() {
-    function attempt() {
-      // Find Grok and Chat drawers by their exact testids from Twitter's DOM
-      const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
-      const chatEl = document.querySelector('[data-testid="DMDrawer"]') ||
-                     document.querySelector('[data-testid="FloatingActionButtons"] a[href*="messages"]')?.closest('[style]') ||
-                     // fallback: find the fixed bottom-right button that is NOT the grok one
-                     Array.from(document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]'))
-                       .filter(el => {
-                         if (el.contains(grokEl)) return false;
-                         const r = el.getBoundingClientRect();
-                         return r.right > window.innerWidth - 100 && r.bottom > window.innerHeight - 120 && r.width > 40 && r.width < 80;
-                       })[0];
-
-      if (!grokEl) return false;
-
-      const grokRect = grokEl.getBoundingClientRect();
-      const btn = document.getElementById('im-ditto-btn');
-      if (!btn) return false;
-
-      // Measure the gap between Grok top and Chat top (same gap goes above Grok for Ditto)
-      let gap = 16; // sensible default
-      if (chatEl) {
-        const chatRect = chatEl.getBoundingClientRect();
-        gap = Math.max(8, grokRect.top - chatRect.top - grokRect.height);
-        // If that comes out weird, fall back to the visual spacing between the two buttons
-        if (gap <= 0) gap = chatRect.top - grokRect.bottom;
-        if (gap <= 0 || gap > 60) gap = 16;
-      }
-
-      // Use chat button for size + right alignment (it's the clean reference)
-      const chatRect = chatEl ? chatEl.getBoundingClientRect() : null;
-      const btnSize = chatRect ? Math.round(Math.min(chatRect.width, chatRect.height)) : 52;
-      const rightFromViewport = chatRect
-        ? Math.max(0, Math.round(window.innerWidth - chatRect.right) - 10)
-        : 14;
-
-      // Ditto bottom = distance from viewport bottom to TOP of GrokDrawer + same gap
-      const grokRect2 = grokEl.getBoundingClientRect();
-      const dittoBottom = Math.round(window.innerHeight - grokRect2.top + gap + 8);
-
-      btn.style.right  = rightFromViewport + 'px';
-      btn.style.bottom = dittoBottom + 'px';
-      btn.style.width  = btnSize + 'px';
-      btn.style.height = btnSize + 'px';
-
-      const modal = document.getElementById('im-ditto-modal');
-      if (modal) {
-        modal.style.right  = rightFromViewport + 'px';
-        modal.style.bottom = (dittoBottom + btnSize + 8) + 'px';
-      }
-      return true;
-    }
-
-    if (!attempt()) {
-      let tries = 0;
-      const interval = setInterval(() => {
-        if (attempt() || ++tries > 25) clearInterval(interval);
-      }, 500);
-    }
-  }
-
-  // â”€â”€ Ditto floating button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  function mountDittoButton() {
-    if (document.getElementById('im-ditto-btn')) return;
-
-    const DITTO_IMG = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png`;
-
-    const btn = document.createElement('button');
-    btn.id = 'im-ditto-btn';
-    btn.title = 'Ditto â€” Find your trading tribe';
-    // icon inner div mirrors Twitter's exact structure: absolute inset-0, size-9 (36px)
-    btn.innerHTML = `
-      <div style="position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-        <img src="${DITTO_IMG}" alt="Ditto" style="width:44px;height:44px;image-rendering:pixelated;">
-      </div>`;
-    btn.addEventListener('click', toggleDittoModal);
-    document.body.appendChild(btn);
-
-    // Snap Ditto's right/bottom to match Twitter's top floating button exactly
-    alignDittoToTwitterButtons();
-
-    const modal = document.createElement('div');
-    modal.id = 'im-ditto-modal';
-    modal.innerHTML = renderDittoModal();
-    document.body.appendChild(modal);
-
-    const closeBtn = modal.querySelector('.im-ditto-close');
-    closeBtn?.addEventListener('click', () => {
-      modal.classList.remove('open');
-    });
-
-    observeTwitterPanels();
-    updateDittoVisibility();
-    watchSidebarForDitto();
-  }
-
-  function observeTwitterPanels() {
-    const observer = new MutationObserver(() => {
-      const twitterPanelOpen = !!(
-        document.querySelector('[data-testid="DMDrawer"]') ||
-        document.querySelector('[data-testid="GrokDrawer"]') ||
-        document.querySelector('[aria-label="Direct Messages"]')
-      );
-      const btn = document.getElementById('im-ditto-btn');
-      const modal = document.getElementById('im-ditto-modal');
-      if (btn) btn.style.zIndex = twitterPanelOpen ? '1000' : '99999';
-      if (modal) modal.style.zIndex = twitterPanelOpen ? '1001' : '100001';
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-
-  function toggleDittoModal() {
-    const modal = document.getElementById('im-ditto-modal');
-    if (!modal) return;
-    modal.innerHTML = renderDittoModal();
-    const closeBtn = modal.querySelector('.im-ditto-close');
-    closeBtn?.addEventListener('click', () => modal.classList.remove('open'));
-    modal.classList.toggle('open');
-  }
-
-  function renderDittoModal() {
-    const betLog = readJsonLocalStorage('instamarket_bet_log_v1');
-    const uniqueMarkets = new Set(Array.isArray(betLog) ? betLog.map(entry => entry?.marketId).filter(Boolean) : []);
-    const betCount = Array.isArray(betLog) ? betLog.length : 0;
-
-    return `
-      <div class="im-ditto-header">
-        <div>
-          <div class="im-ditto-title"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" style="width:20px;height:20px;vertical-align:middle;image-rendering:pixelated;margin-right:6px;">Ditto Matchmaking</div>
-          <div class="im-ditto-sub">Live-only mode</div>
-        </div>
-        <button class="im-ditto-close">âœ•</button>
-      </div>
-      <div class="im-ditto-list">
-        <div class="im-ditto-profile">
-          <div class="im-market-title">No mock profiles</div>
-          <div class="im-ditto-reason">This panel is now live-only. Matchmaker profiles will appear when Person 4's compatibility service is connected.</div>
-        </div>
-        <div class="im-ditto-profile">
-          <div class="im-market-title">Your activity snapshot</div>
-          <div class="im-ditto-reason">Bets placed: ${betCount}</div>
-          <div class="im-ditto-reason">Markets traded: ${uniqueMarkets.size}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  function readJsonLocalStorage(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
   }
 
   // â”€â”€ Tweet observation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -246,12 +76,14 @@
       document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(tweet => {
         injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
       });
+      requestViewportMarketSync();
     });
     observer.observe(document.body, { childList: true, subtree: true });
     // Also run immediately on existing tweets
     document.querySelectorAll('article[data-testid="tweet"]').forEach(tweet => {
       injectTweetLayer(tweet).catch(error => console.warn('[InstaMarket] Tweet injection error:', error));
     });
+    requestViewportMarketSync();
   }
 
   async function injectTweetLayer(tweet) {
@@ -262,8 +94,11 @@
     const match = await findBestMarketForTweetWithAi(tweetText);
     if (!match) return;
     const market = match.market;
+    const marketId = String(market.id);
     const researchSummary = buildResearchSummary(tweetText, match);
     persistResearch(market.id, researchSummary);
+    tweet.dataset.imMarketId = marketId;
+    imTweetMarketMap.set(tweet, marketId);
     const safeQuestion = escapeHtml(market.question);
     const safeVolume = escapeHtml(market.volume || '$0 Vol');
     const safeMarketId = escapeHtml(String(market.id));
@@ -421,6 +256,7 @@
     syncTweetLayerAlignment(layer, tweet);
     requestAnimationFrame(() => syncTweetLayerAlignment(layer, tweet));
     window.setTimeout(() => syncTweetLayerAlignment(layer, tweet), 180);
+    requestViewportMarketSync();
   }
 
   function syncTweetLayerAlignment(layer, tweet) {
@@ -445,6 +281,62 @@
         syncTweetLayerAlignment(layer, tweet);
       }
     });
+  }
+
+  function requestViewportMarketSync() {
+    if (imViewportSyncRaf) return;
+    imViewportSyncRaf = window.requestAnimationFrame(() => {
+      imViewportSyncRaf = 0;
+      syncSidebarToClosestTweetMarket();
+    });
+  }
+
+  function syncSidebarToClosestTweetMarket() {
+    if (typeof window.setSidebarActiveMarketFromViewport !== 'function') return;
+    if (!imTweetMarketMap.size) return;
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (viewportHeight <= 0) return;
+    const viewportCenterY = viewportHeight / 2;
+
+    let bestMarketId = '';
+    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestVisibleRatio = -1;
+
+    for (const [tweet, marketId] of imTweetMarketMap.entries()) {
+      if (!tweet?.isConnected) {
+        imTweetMarketMap.delete(tweet);
+        continue;
+      }
+
+      const rect = tweet.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= viewportHeight) {
+        continue;
+      }
+
+      const visibleTop = Math.max(0, rect.top);
+      const visibleBottom = Math.min(viewportHeight, rect.bottom);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const visibleRatio = rect.height > 0 ? visibleHeight / rect.height : 0;
+      const centerY = rect.top + rect.height / 2;
+      const distance = Math.abs(centerY - viewportCenterY);
+
+      if (
+        distance < bestDistance - 0.5 ||
+        (Math.abs(distance - bestDistance) <= 0.5 && visibleRatio > bestVisibleRatio)
+      ) {
+        bestDistance = distance;
+        bestVisibleRatio = visibleRatio;
+        bestMarketId = String(marketId || '').trim();
+      }
+    }
+
+    if (!bestMarketId || bestMarketId === imLastViewportMarketId) {
+      return;
+    }
+
+    imLastViewportMarketId = bestMarketId;
+    window.setSidebarActiveMarketFromViewport(bestMarketId);
   }
 
   function findTweetContentAnchor(tweet) {
@@ -558,7 +450,6 @@
       steps: []
     });
     switchSidebarToMarkets(market.id);
-    showToast('Running live research...');
 
     if (typeof runResearchThesisForTweet !== 'function') {
       throw new Error('runResearchThesisForTweet helper unavailable');
@@ -613,7 +504,6 @@
       showFullData: false
     });
     switchSidebarToMarkets(market.id);
-    showToast(`Research ready: "${market.question.slice(0, 40)}â€¦"`);
   }
 
   function extractTweetContext(tweet) {
