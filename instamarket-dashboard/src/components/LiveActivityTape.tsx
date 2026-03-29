@@ -6,6 +6,13 @@ interface LiveActivityTapeProps {
   events: ActivityEvent[];
 }
 
+function eventConfidenceLabel(event: ActivityEvent) {
+  if (event.type === "swing") return "High confidence";
+  if (event.type === "signal") return "Model signal";
+  if (event.type === "bet") return "Execution";
+  return "Watchlist";
+}
+
 export function LiveActivityTape({ events }: LiveActivityTapeProps) {
   return (
     <section className="activity-panel">
@@ -14,7 +21,10 @@ export function LiveActivityTape({ events }: LiveActivityTapeProps) {
           <div className="section-kicker">Execution tape</div>
           <h2>Live flow</h2>
         </div>
-        <span className="status-live">streaming</span>
+        <span className="status-live">
+          <span className="live-dot" />
+          streaming
+        </span>
       </div>
 
       <div className="activity-list">
@@ -37,8 +47,10 @@ export function LiveActivityTape({ events }: LiveActivityTapeProps) {
             </div>
             <div className="activity-copy">
               <strong>{event.label}</strong>
-              <span>
-                {event.source} · {event.timestamp}
+              <span className="activity-meta-row">
+                <span>{event.source}</span>
+                <span className="activity-confidence">{eventConfidenceLabel(event)}</span>
+                <span>{event.timestamp}</span>
               </span>
             </div>
             <div className="activity-amount">{event.amount}</div>

@@ -1,6 +1,6 @@
-import { motion } from "framer-motion";
-import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { AnimatedSparkline } from "./AnimatedSparkline";
 import { AnimatedMetric } from "./AnimatedMetric";
+import { RevealOnScroll } from "./RevealOnScroll";
 import type { SourceMetric } from "../types";
 
 interface SourceAttributionPanelProps {
@@ -23,71 +23,57 @@ export function SourceAttributionPanel({
       </div>
 
       <div className="source-grid">
-        {metrics.map((metric) => (
-          <motion.article
-            key={metric.source}
-            className="source-card"
-            whileHover={{ y: -3 }}
-          >
-            <div className="source-card-header">
-              <div className="source-title">{metric.source}</div>
-              <div className="source-badge" style={{ color: metric.accent }}>
-                <AnimatedMetric value={metric.winRate} suffix="%" />
-              </div>
-            </div>
+        {metrics.map((metric, index) => (
+          <RevealOnScroll key={metric.source} as="article" className="source-card" delay={index * 0.06}>
+            {({ isVisible }) => (
+              <>
+                <div className="source-card-header">
+                  <div className="source-title">{metric.source}</div>
+                  <div className="source-badge" style={{ color: metric.accent }}>
+                    <AnimatedMetric value={metric.winRate} suffix="%" start={isVisible} delay={index * 0.06 + 0.08} />
+                  </div>
+                </div>
 
-            <div className="source-metrics">
-              <div>
-                <span>Edge</span>
-                <strong>
-                  <AnimatedMetric value={metric.edgeCaptured} decimals={1} suffix=" pts" />
-                </strong>
-              </div>
-              <div>
-                <span>Bets</span>
-                <strong>{metric.bets}</strong>
-              </div>
-              <div>
-                <span>Conversion</span>
-                <strong>
-                  <AnimatedMetric value={metric.conversion} suffix="%" />
-                </strong>
-              </div>
-            </div>
+                <div className="source-metrics">
+                  <div>
+                    <span>Edge</span>
+                    <strong>
+                      <AnimatedMetric value={metric.edgeCaptured} decimals={1} suffix=" pts" start={isVisible} delay={index * 0.06 + 0.12} />
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Bets</span>
+                    <strong>
+                      <AnimatedMetric value={metric.bets} start={isVisible} delay={index * 0.06 + 0.16} />
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Conversion</span>
+                    <strong>
+                      <AnimatedMetric value={metric.conversion} suffix="%" start={isVisible} delay={index * 0.06 + 0.2} />
+                    </strong>
+                  </div>
+                </div>
 
-            <div className="source-trend">
-              <ResponsiveContainer width="100%" height={74}>
-                <AreaChart
-                  data={metric.trendPoints.map((point, index) => ({
-                    index,
-                    point,
+                <AnimatedSparkline
+                  points={metric.trendPoints.map((point, pointIndex) => ({
+                    time: String(pointIndex),
+                    label: String(pointIndex),
+                    probability: point,
+                    volume: point,
                   }))}
-                >
-                  <defs>
-                    <linearGradient
-                      id={`source-fill-${metric.source}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor={metric.accent} stopOpacity={0.42} />
-                      <stop offset="95%" stopColor={metric.accent} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="point"
-                    stroke={metric.accent}
-                    fill={`url(#source-fill-${metric.source})`}
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+                  id={`source-${metric.source}`}
+                  strokeColor={metric.accent}
+                  fillColor={metric.accent}
+                  height={74}
+                  visible={isVisible}
+                  delay={index * 0.06 + 0.08}
+                />
 
-            <p className="source-thesis">{metric.thesis}</p>
-          </motion.article>
+                <p className="source-thesis">{metric.thesis}</p>
+              </>
+            )}
+          </RevealOnScroll>
         ))}
       </div>
     </section>

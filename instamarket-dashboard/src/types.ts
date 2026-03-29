@@ -1,4 +1,5 @@
 export type DashboardTopicId = "ai" | "macro" | "elections" | "crypto";
+export type DashboardViewId = "dashboard" | "portfolio" | "saved";
 
 export type MarketCardVariant =
   | "sparkline"
@@ -63,6 +64,65 @@ export interface ActivityEvent {
   source: string;
 }
 
+export interface PortfolioPosition {
+  id: string;
+  marketId: string;
+  side: "YES" | "NO";
+  entryProbability: number;
+  sizeUsd: number;
+  conviction: "High" | "Medium" | "Low";
+  openedAt: string;
+  thesis: string;
+}
+
+export interface SavedMarketEntry {
+  id: string;
+  marketId: string;
+  savedProbability: number;
+  savedAt: string;
+  source: string;
+  note: string;
+}
+
+export interface LinkedPortfolioBet {
+  marketId: string;
+  question: string;
+  side: "YES" | "NO";
+  amount: number;
+  placedAt: string;
+  yesOdds?: number;
+  noOdds?: number;
+  currentYesOdds?: number;
+  currentNoOdds?: number;
+}
+
+export interface LinkedSavedMarket {
+  marketId: string;
+  question: string;
+  savedAt: string;
+  savedYesOdds: number;
+  savedNoOdds: number;
+  currentYesOdds?: number;
+  currentNoOdds?: number;
+  savedVolume?: string;
+  currentVolume?: string;
+}
+
+export interface LinkedAccountState {
+  walletAddress: string | null;
+  connected: boolean;
+  portfolio: {
+    totalValue: number;
+    dailyPnl: number;
+    betCount: number;
+    yesBets: number;
+    noBets: number;
+    marketCount: number;
+    recentBets: LinkedPortfolioBet[];
+  };
+  savedMarkets: LinkedSavedMarket[];
+}
+
 export interface DashboardTopic {
   id: DashboardTopicId;
   label: string;
@@ -82,4 +142,6 @@ export interface DashboardData {
   markets: Record<string, MarketRecord>;
   sourceMetrics: Record<DashboardTopicId, SourceMetric[]>;
   activityByTopic: Record<DashboardTopicId, ActivityEvent[]>;
+  portfolioPositions: PortfolioPosition[];
+  savedMarkets: SavedMarketEntry[];
 }

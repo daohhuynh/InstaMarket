@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 const { Connection, PublicKey } = require("@solana/web3.js");
 const {
@@ -10,10 +11,9 @@ const {
 const personas = require("./personas.json");
 
 const app = express();
-app.use(cors()); // Crucial: Chrome Extensions will block requests without this
+app.use(cors());
 app.use(express.json());
 
-// 1. Initialize Clients
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
@@ -28,6 +28,8 @@ const bedrockClient = new BedrockRuntimeClient({
 
 const NOVA_LITE_TIMEOUT_MS = Number(process.env.NOVA_LITE_TIMEOUT_MS) || 45_000;
 let personaSimInFlight = false;
+const EXTENSION_SYNC_STATE = new Map();
+const DASHBOARD_DIST_DIR = path.resolve(__dirname, "..", "instamarket-dashboard", "dist");
 
 function withTimeout(promise, ms, label) {
   let timer;
@@ -37,9 +39,7 @@ function withTimeout(promise, ms, label) {
       ms,
     );
   });
-  return Promise.race([promise, timeoutPromise]).finally(() =>
-    clearTimeout(timer),
-  );
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 function fallbackDecision(persona, reason) {
@@ -54,49 +54,35 @@ function fallbackDecision(persona, reason) {
   };
 }
 
-// Helper: Generate fake keywords from titles so the Extension's tweet matcher works
-const generateKeywords = (title) => {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, "")
-    .split(" ")
-    .filter((w) => w.length > 3);
-};
+async function lookupUserId(walletAddress) {
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("sol_wallet_address", walletAddress)
+    .single();
+  if (error || !user?.id) {
+    return null;
+  }
+  return user.id;
+}
 
-// --- ENDPOINT: /api/markets ---
-// Translates your Supabase 'markets' table into Person 3's MOCK_MARKETS shape
-// --- ENDPOINT: /api/bet ---
-// Handles the HUMAN user clicking "Bet YES" or "Bet NO" in the Chrome Extension
 app.post("/api/bet", async (req, res) => {
   try {
-    // Expected payload from Chrome Extension:
-    // { walletAddress, marketId, side, shares, price }
     const { walletAddress, marketId, side, shares, price } = req.body;
+    const userId = await lookupUserId(walletAddress);
+    if (!userId) throw new Error("User wallet not registered");
 
-    // 1. Find the internal user ID mapped to this Solana wallet
-    const { data: user, error: userErr } = await supabase
-      .from("users")
-      .select("id")
-      .eq("sol_wallet_address", walletAddress)
-      .single();
-
-    if (userErr || !user) throw new Error("User wallet not registered");
-
-    // 2. Record the trade in the Supabase Ledger
     const { error: insertErr } = await supabase.from("positions").insert([
       {
-        user_id: user.id,
-        market_id: parseInt(marketId.replace(/\D/g, "")) || 1, // Strip 'm' from mock ids if present
-        side: side,
-        shares: shares,
+        user_id: userId,
+        market_id: parseInt(String(marketId).replace(/\D/g, ""), 10) || 1,
+        side,
+        shares,
         average_entry_price: price,
       },
     ]);
 
     if (insertErr) throw insertErr;
-
-    // 3. (Optional for Demo) Actually burn mock USDC via Solana connection here
-    // await splTokenTransfer(...)
 
     res.status(200).json({
       success: true,
@@ -108,92 +94,242 @@ app.post("/api/bet", async (req, res) => {
   }
 });
 
-// --- ENDPOINT: /api/save ---
-// Handles the HUMAN user clicking the "Save for Later" bookmark icon
 app.post("/api/save", async (req, res) => {
   try {
     const { walletAddress, marketId } = req.body;
-
-    const { data: user, error: userErr } = await supabase
-      .from("users")
-      .select("id")
-      .eq("sol_wallet_address", walletAddress)
-      .single();
-
-    if (userErr || !user) {
+    const userId = await lookupUserId(walletAddress);
+    if (!userId) {
       return res.status(404).json({ error: "User wallet not registered" });
     }
 
     const { error } = await supabase.from("saved_markets_timeseries").insert([
       {
-        user_id: user.id,
-        market_id: parseInt(marketId.replace(/\D/g, "")) || 1,
+        user_id: userId,
+        market_id: parseInt(String(marketId).replace(/\D/g, ""), 10) || 1,
       },
     ]);
 
     if (error) throw error;
     res.status(200).json({ success: true });
   } catch (err) {
+    console.error("Save processing failed:", err);
     res.status(500).json({ error: "Failed to save market" });
   }
 });
-// --- ENDPOINT: /api/portfolio ---
-// Merges Supabase positions and Solana on-chain balance for Person 3's MOCK_PORTFOLIO
+
 app.get("/api/portfolio/:walletAddress", async (req, res) => {
   try {
-    const walletPubkey = new PublicKey(req.params.walletAddress);
-
-    // 1. Get real SOL balance
+    const walletAddress = String(req.params.walletAddress || "").trim();
+    const walletPubkey = new PublicKey(walletAddress);
     const balanceLamports = await solanaConnection.getBalance(walletPubkey);
     const solBalance = balanceLamports / 1e9;
 
-    // 2. Get user's Postgres positions
-    const { data: users } = await supabase
-      .from("users")
-      .select("id")
-      .eq("sol_wallet_address", req.params.walletAddress)
-      .single();
+    const userId = await lookupUserId(walletAddress);
     let openPositions = [];
 
-    if (users) {
+    if (userId) {
       const { data: positions } = await supabase
         .from("positions")
-        .select(
-          `side, average_entry_price, shares, markets(title, current_yes_price)`,
-        )
-        .eq("user_id", users.id);
+        .select("side, average_entry_price, shares, markets(title, current_yes_price)")
+        .eq("user_id", userId);
 
       openPositions = (positions || []).map((p) => {
         const currentPrice =
           p.side === "YES"
-            ? p.markets.current_yes_price
-            : 100 - p.markets.current_yes_price;
-        const pnl = (currentPrice - p.average_entry_price) * p.shares;
+            ? Number(p.markets?.current_yes_price) || 0
+            : 100 - (Number(p.markets?.current_yes_price) || 0);
+        const averageEntry = Number(p.average_entry_price) || 0;
+        const shareCount = Number(p.shares) || 0;
+        const pnl = (currentPrice - averageEntry) * shareCount;
         return {
-          title: p.markets.title,
+          title: p.markets?.title || "Unknown market",
           side: p.side,
-          stake: p.average_entry_price * p.shares,
-          pnl: pnl,
-          pnlPct:
-            ((currentPrice - p.average_entry_price) / p.average_entry_price) *
-            100,
+          stake: averageEntry * shareCount,
+          pnl,
+          pnlPct: averageEntry ? ((currentPrice - averageEntry) / averageEntry) * 100 : 0,
           positive: pnl >= 0,
         };
       });
     }
 
     res.json({
-      totalValue: solBalance * 150, // Mocking SOL to USD for demo
+      totalValue: solBalance * 150,
       dailyPnl: openPositions.reduce((sum, p) => sum + p.pnl, 0),
       positions: openPositions,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Portfolio fetch failed:", err);
     res.status(500).json({ error: "Failed to fetch portfolio" });
   }
 });
 
-// ── Nova Lite helpers ────────────────────────────────────────
+app.post("/api/sidebar-state-sync", async (req, res) => {
+  try {
+    const walletAddress = String(req.body?.walletAddress || "").trim();
+    if (!walletAddress) {
+      return res.status(400).json({ error: "walletAddress is required" });
+    }
+
+    EXTENSION_SYNC_STATE.set(walletAddress, {
+      recentBets: Array.isArray(req.body?.recentBets) ? req.body.recentBets : [],
+      savedMarkets: Array.isArray(req.body?.savedMarkets) ? req.body.savedMarkets : [],
+      syncedAt: new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("sidebar-state-sync failed:", err);
+    res.status(500).json({ error: "Failed to sync sidebar state" });
+  }
+});
+
+app.get("/api/dashboard-state/:walletAddress", async (req, res) => {
+  try {
+    const walletAddress = String(req.params.walletAddress || "").trim();
+    if (!walletAddress) {
+      return res.status(400).json({ error: "walletAddress is required" });
+    }
+
+    let totalValue = 0;
+    try {
+      const walletPubkey = new PublicKey(walletAddress);
+      const balanceLamports = await solanaConnection.getBalance(walletPubkey);
+      totalValue = (balanceLamports / 1e9) * 150;
+    } catch {
+      totalValue = 0;
+    }
+
+    const extensionState = EXTENSION_SYNC_STATE.get(walletAddress) || {
+      recentBets: [],
+      savedMarkets: [],
+    };
+
+    const userId = await lookupUserId(walletAddress);
+    let normalizedPositions = [];
+    let savedMarkets = [];
+
+    if (userId) {
+      const { data: positions } = await supabase
+        .from("positions")
+        .select("market_id, side, shares, average_entry_price, created_at, markets(title, current_yes_price)")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      normalizedPositions = (positions || []).map((entry) => {
+        const currentYesOdds = Number(entry?.markets?.current_yes_price) || 0;
+        const currentPrice = entry.side === "YES" ? currentYesOdds : 100 - currentYesOdds;
+        const stake = (Number(entry.average_entry_price) || 0) * (Number(entry.shares) || 0);
+        const pnl = (currentPrice - (Number(entry.average_entry_price) || 0)) * (Number(entry.shares) || 0);
+        return {
+          marketId: String(entry.market_id || ""),
+          question: entry?.markets?.title || "Unknown market",
+          side: entry.side === "NO" ? "NO" : "YES",
+          amount: Math.max(0, Math.round(stake)),
+          placedAt: entry.created_at || new Date().toISOString(),
+          yesOdds: currentYesOdds,
+          noOdds: 100 - currentYesOdds,
+          currentYesOdds,
+          currentNoOdds: 100 - currentYesOdds,
+          pnl,
+        };
+      });
+
+      const { data: savedRows } = await supabase
+        .from("saved_markets_timeseries")
+        .select("market_id, created_at, markets(title, current_yes_price, volume)")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      const savedSeen = new Set();
+      for (const row of savedRows || []) {
+        const marketId = String(row.market_id || "");
+        if (!marketId || savedSeen.has(marketId)) continue;
+        savedSeen.add(marketId);
+        const currentYesOdds = Number(row?.markets?.current_yes_price) || 0;
+        savedMarkets.push({
+          marketId,
+          question: row?.markets?.title || "Unknown market",
+          savedAt: row.created_at || new Date().toISOString(),
+          savedYesOdds: currentYesOdds,
+          savedNoOdds: 100 - currentYesOdds,
+          currentYesOdds,
+          currentNoOdds: 100 - currentYesOdds,
+          savedVolume: row?.markets?.volume || "$0 Vol",
+          currentVolume: row?.markets?.volume || "$0 Vol",
+        });
+      }
+    }
+
+    const mergedBetsMap = new Map();
+    for (const entry of [...normalizedPositions, ...(Array.isArray(extensionState.recentBets) ? extensionState.recentBets : [])]) {
+      if (!entry) continue;
+      const key = `${entry.marketId || entry.question}-${entry.placedAt || ""}-${entry.side || ""}`;
+      if (!mergedBetsMap.has(key)) {
+        mergedBetsMap.set(key, {
+          marketId: String(entry.marketId || ""),
+          question: entry.question || "Unknown market",
+          side: entry.side === "NO" ? "NO" : "YES",
+          amount: Number(entry.amount || 0),
+          placedAt: entry.placedAt || new Date().toISOString(),
+          yesOdds: Number(entry.yesOdds || entry.currentYesOdds || 0),
+          noOdds: Number(entry.noOdds || entry.currentNoOdds || 0),
+          currentYesOdds: Number(entry.currentYesOdds || entry.yesOdds || 0),
+          currentNoOdds: Number(entry.currentNoOdds || entry.noOdds || 0),
+          pnl: Number(entry.pnl || 0),
+        });
+      }
+    }
+
+    const mergedSavedMap = new Map();
+    for (const entry of [...savedMarkets, ...(Array.isArray(extensionState.savedMarkets) ? extensionState.savedMarkets : [])]) {
+      if (!entry) continue;
+      const marketId = String(entry.marketId || "");
+      if (!marketId || mergedSavedMap.has(marketId)) continue;
+      mergedSavedMap.set(marketId, {
+        marketId,
+        question: entry.question || "Unknown market",
+        savedAt: entry.savedAt || new Date().toISOString(),
+        savedYesOdds: Number(entry.savedYesOdds || 0),
+        savedNoOdds: Number(entry.savedNoOdds || 0),
+        currentYesOdds: Number(entry.currentYesOdds || entry.savedYesOdds || 0),
+        currentNoOdds: Number(entry.currentNoOdds || entry.savedNoOdds || 0),
+        savedVolume: entry.savedVolume || "$0 Vol",
+        currentVolume: entry.currentVolume || entry.savedVolume || "$0 Vol",
+      });
+    }
+
+    const mergedRecentBets = [...mergedBetsMap.values()]
+      .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime())
+      .slice(0, 12);
+    const mergedSavedMarkets = [...mergedSavedMap.values()]
+      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+
+    const yesBets = mergedRecentBets.filter((entry) => entry.side === "YES").length;
+    const noBets = mergedRecentBets.filter((entry) => entry.side === "NO").length;
+    const marketCount = new Set(mergedRecentBets.map((entry) => entry.marketId)).size;
+    const dailyPnl = mergedRecentBets.reduce((sum, entry) => sum + Number(entry.pnl || 0), 0);
+
+    res.json({
+      walletAddress,
+      portfolio: {
+        totalValue,
+        dailyPnl,
+        betCount: mergedRecentBets.length,
+        yesBets,
+        noBets,
+        marketCount,
+        recentBets: mergedRecentBets,
+      },
+      savedMarkets: mergedSavedMarkets,
+    });
+  } catch (err) {
+    console.error("dashboard-state failed:", err);
+    res.status(500).json({ error: "Failed to fetch dashboard state" });
+  }
+});
+
 async function callNovaLite(persona, tweetText, market) {
   const prompt = `You are ${persona.name} (${persona.type}).
 Personality: ${persona.personality}
@@ -228,11 +364,11 @@ function parseNovaResponse(text, persona) {
       text.match(/DECISION:\s*(YES|NO)/i)?.[1]?.toUpperCase() || "NO";
     const shares = Math.min(
       50,
-      Math.max(1, parseInt(text.match(/SHARES:\s*(\d+)/i)?.[1]) || 5),
+      Math.max(1, parseInt(text.match(/SHARES:\s*(\d+)/i)?.[1], 10) || 5),
     );
     const confidence = Math.min(
       100,
-      Math.max(1, parseInt(text.match(/CONFIDENCE:\s*(\d+)/i)?.[1]) || 50),
+      Math.max(1, parseInt(text.match(/CONFIDENCE:\s*(\d+)/i)?.[1], 10) || 50),
     );
     const reasoning =
       text.match(/REASONING:\s*(.+)/i)?.[1]?.trim() || "No reasoning provided.";
@@ -246,15 +382,7 @@ function parseNovaResponse(text, persona) {
       reasoning,
     };
   } catch {
-    return {
-      id: persona.id,
-      name: persona.name,
-      type: persona.type,
-      decision: "NO",
-      shares: 5,
-      confidence: 50,
-      reasoning: "Could not parse response.",
-    };
+    return fallbackDecision(persona, "Could not parse response.");
   }
 }
 
@@ -296,7 +424,6 @@ app.get("/api/orderbook/:marketId", async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    // Fail gracefully — CLOB may not be running
     console.warn("Orderbook fetch error (non-fatal):", err.message);
     res.json({ yes: [], no: [] });
   }
@@ -314,12 +441,9 @@ app.post("/api/persona-sim", async (req, res) => {
   try {
     const { tweetText, market } = req.body;
     if (!tweetText || !market) {
-      return res
-        .status(400)
-        .json({ error: "tweetText and market are required" });
+      return res.status(400).json({ error: "tweetText and market are required" });
     }
 
-    // Exactly one Bedrock call per persona; failures do not cancel sibling calls
     const settled = await Promise.allSettled(
       personas.map((persona) =>
         withTimeout(
@@ -347,27 +471,16 @@ app.post("/api/persona-sim", async (req, res) => {
       );
     });
 
-    // Submit all orders to the C++ CLOB (non-blocking — don't fail if CLOB is down)
     submitToCLOB(decisions).catch((err) =>
       console.warn("[persona-sim] CLOB submission failed:", err.message),
     );
 
-    // Aggregate results
     const yesAgents = decisions.filter((d) => d.decision === "YES");
     const noAgents = decisions.filter((d) => d.decision === "NO");
-    const simulatedYesPct = Math.round(
-      (yesAgents.length / decisions.length) * 100,
-    );
+    const simulatedYesPct = Math.round((yesAgents.length / decisions.length) * 100);
     const simulatedNoPct = 100 - simulatedYesPct;
     const edge = simulatedYesPct - (market.yesOdds || 50);
     const edgeVsMarket = `${edge >= 0 ? "+" : ""}${edge}% YES vs current odds`;
-
-    const topYes = [...yesAgents]
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 3);
-    const topNo = [...noAgents]
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 3);
 
     res.json({
       totalAgents: decisions.length,
@@ -377,8 +490,8 @@ app.post("/api/persona-sim", async (req, res) => {
       realNoPct: market.noOdds || 50,
       edgeVsMarket,
       decisions,
-      topYes,
-      topNo,
+      topYes: [...yesAgents].sort((a, b) => b.confidence - a.confidence).slice(0, 3),
+      topNo: [...noAgents].sort((a, b) => b.confidence - a.confidence).slice(0, 3),
     });
   } catch (err) {
     console.error("[persona-sim] failed:", err);
@@ -388,9 +501,16 @@ app.post("/api/persona-sim", async (req, res) => {
   }
 });
 
+app.use("/dashboard", express.static(DASHBOARD_DIST_DIR));
+app.get(/^\/dashboard(?:\/.*)?$/, (_req, res) => {
+  res.sendFile(path.join(DASHBOARD_DIST_DIR, "index.html"), (error) => {
+    if (!error) return;
+    res
+      .status(error.statusCode || 500)
+      .send("Dashboard build not available. Run npm run build in instamarket-dashboard.");
+  });
+});
 const PORT = 3000;
 app.listen(PORT, () => {
-  console.log(
-    `🚀 InstaMarket Translation Bridge live on http://localhost:${PORT}`,
-  );
+  console.log(`InstaMarket Translation Bridge live on http://localhost:${PORT}`);
 });

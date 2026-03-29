@@ -4,6 +4,8 @@ import type {
   DashboardData,
   DashboardTopicId,
   MarketRecord,
+  PortfolioPosition,
+  SavedMarketEntry,
   SourceMetric,
 } from "../types";
 
@@ -82,6 +84,30 @@ function activity(
   source: string,
 ): ActivityEvent {
   return { id, type, label, timestamp, direction, amount, source };
+}
+
+function portfolioPosition(
+  id: string,
+  marketId: string,
+  side: PortfolioPosition["side"],
+  entryProbability: number,
+  sizeUsd: number,
+  conviction: PortfolioPosition["conviction"],
+  openedAt: string,
+  thesis: string,
+): PortfolioPosition {
+  return { id, marketId, side, entryProbability, sizeUsd, conviction, openedAt, thesis };
+}
+
+function savedMarket(
+  id: string,
+  marketId: string,
+  savedProbability: number,
+  savedAt: string,
+  source: string,
+  note: string,
+): SavedMarketEntry {
+  return { id, marketId, savedProbability, savedAt, source, note };
 }
 
 export const dashboardData: DashboardData = {
@@ -844,6 +870,82 @@ export const dashboardData: DashboardData = {
       activity("crypto-4", "swing", "Base volume odds lifted into close", "6m ago", "up", "+1.4 pts", "Parser"),
     ],
   },
+  portfolioPositions: [
+    portfolioPosition(
+      "pos-ai-gpt5",
+      "ai-gpt5-q3",
+      "YES",
+      57,
+      1850,
+      "High",
+      "Today, 09:42",
+      "Model launch chatter and benchmark leaks kept compounding into cleaner upside odds.",
+    ),
+    portfolioPosition(
+      "pos-macro-rec",
+      "macro-recession-2026",
+      "NO",
+      34,
+      1220,
+      "Medium",
+      "Today, 10:18",
+      "Soft-landing narrative strengthened while downside hedges stayed crowded.",
+    ),
+    portfolioPosition(
+      "pos-crypto-btc",
+      "crypto-btc-120k",
+      "YES",
+      49,
+      2400,
+      "High",
+      "Today, 11:03",
+      "Reflexive narrative + feed velocity looked strong enough for a momentum entry.",
+    ),
+    portfolioPosition(
+      "pos-election-hu",
+      "election-hungary",
+      "YES",
+      59,
+      980,
+      "Medium",
+      "Today, 12:06",
+      "Leaderboard compression started breaking toward the challenger in a repeatable way.",
+    ),
+  ],
+  savedMarkets: [
+    savedMarket(
+      "saved-ai-open",
+      "ai-open-model",
+      41,
+      "Today, 08:55",
+      "Saved markets",
+      "Waiting for a second catalyst before converting watchlist interest into a trade.",
+    ),
+    savedMarket(
+      "saved-macro-cpi",
+      "macro-us-cpi-3",
+      58,
+      "Today, 09:11",
+      "Parser",
+      "Watching for a cleaner entry after the next inflation datapoint reprices the board.",
+    ),
+    savedMarket(
+      "saved-election-senate",
+      "election-senate-map",
+      37,
+      "Today, 10:47",
+      "Manual review",
+      "Map-level signal is improving, but conviction still feels one catalyst away.",
+    ),
+    savedMarket(
+      "saved-crypto-stable",
+      "crypto-stable-bill",
+      35,
+      "Today, 11:32",
+      "Bedrock",
+      "Policy setup is noisy now, but the next headline cycle could create a better timing window.",
+    ),
+  ],
 };
 
 export const topicOrder: DashboardTopicId[] = [
@@ -852,3 +954,4 @@ export const topicOrder: DashboardTopicId[] = [
   "elections",
   "crypto",
 ];
+

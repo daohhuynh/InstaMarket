@@ -1,5 +1,5 @@
 /* ============================================
-   InstaMarket — Polymarket design system
+   InstaMarket â€” Polymarket design system
    ============================================ */
 
 :root {
@@ -24,7 +24,7 @@
 }
 
 /* ============================================
-   TWEET LAYER — injected under each tweet
+   TWEET LAYER â€” injected under each tweet
    ============================================ */
 
 .im-tweet-layer {
@@ -209,10 +209,10 @@
 }
 
 /* ============================================
-   SIDEBAR — replaces Twitter right sidebar
+   SIDEBAR â€” replaces Twitter right sidebar
    ============================================ */
 
-/* Sidebar — slides in/out from the right */
+/* Sidebar â€” slides in/out from the right */
 #im-sidebar {
   position: fixed;
   top: 0;
@@ -233,7 +233,7 @@
   transform: translateX(100%);
 }
 
-/* Collapse / expand toggle tab — sits on the left edge of the sidebar */
+/* Collapse / expand toggle tab â€” sits on the left edge of the sidebar */
 #im-sidebar-toggle {
   position: fixed;
   top: 50%;
@@ -277,7 +277,7 @@
   transform: rotate(180deg);
 }
 
-/* Tab bar — matches Twitter's "For you / Following" style */
+/* Tab bar â€” matches Twitter's "For you / Following" style */
 .im-tab-bar {
   display: flex;
   border-bottom: 1px solid var(--pm-border);
@@ -1663,7 +1663,7 @@
 }
 
 /* ============================================
-   IM2 — New Research Panel Design System
+   IM2 â€” New Research Panel Design System
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap');
@@ -2584,7 +2584,7 @@ html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn:hover {
   }
 }
 
-/* ── CLOB Order Book Depth Chart ────────────────────────────── */
+/* â”€â”€ CLOB Order Book Depth Chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .im2-ob-details {
   margin-top: 2px;
 }
@@ -2760,7 +2760,7 @@ html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn:hover {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
-/* ── CLOB Animation Additions ───────────────────────────────── */
+/* â”€â”€ CLOB Animation Additions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .im2-ob-ticker {
   display: flex;
   align-items: center;
@@ -2836,5 +2836,4 @@ html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn:hover {
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 10px;
-  font-weight: 700;
-}
+  font-weight: 700;}
