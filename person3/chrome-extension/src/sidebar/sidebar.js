@@ -1,5 +1,5 @@
-// ============================================================
-// SIDEBAR ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â renders the InstaMarket right sidebar (live-data only)
+﻿// ============================================================
+// SIDEBAR ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â renders the InstaMarket right sidebar (live-data only)
 // ============================================================
 
 const IM_MARKET_RESEARCH = {};
@@ -141,8 +141,8 @@ function renderBetRow(entry) {
         <div class="im-position-title">${escapeHtml(entry.question || 'Unknown market')}</div>
         <div class="im-position-meta">
           <span style="color:${positiveSide ? 'var(--pm-green)' : 'var(--pm-red)'};">${escapeHtml(entry.side)}</span>
-          ${amountLabel ? `&nbsp;ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·&nbsp;${escapeHtml(amountLabel)}` : ''}
-          &nbsp;ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·&nbsp;${formatTimestamp(entry.placedAt)}
+          ${amountLabel ? `&nbsp;&middot;&nbsp;${escapeHtml(amountLabel)}` : ''}
+          &nbsp;&middot;&nbsp;${formatTimestamp(entry.placedAt)}
         </div>
       </div>
       <div
@@ -393,13 +393,13 @@ function renderThesisCard(research) {
 
   const convDotClass = conviction === 'High' ? 'im2-dot--yes' : conviction === 'Medium' ? 'im2-dot--skip' : 'im2-dot--no';
   const evBars = evidenceQuality === 'Strong' ? 3 : evidenceQuality === 'Moderate' ? 2 : 1;
-  const biasArrow = suggestedAction === 'YES' ? 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â' : suggestedAction === 'NO' ? 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ' : 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢';
+  const biasArrow = suggestedAction === 'YES' ? 'UP' : suggestedAction === 'NO' ? 'DOWN' : 'HOLD';
 
   return `
     <div class="im2-report-panel">
       <div class="im2-report-header">
         <span class="im2-report-label">REPORT</span>
-        <span class="im2-report-sep">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·</span>
+        <span class="im2-report-sep">|</span>
         <span class="im2-report-id">${escapeHtml(reportId || (marketId ? marketId.slice(0, 24) : 'n/a'))}</span>
       </div>
 
@@ -443,7 +443,7 @@ function renderThesisCard(research) {
       <div class="im2-mme-panel">
         <div class="im2-mme-cell">
           <div class="im2-mme-label">MARKET</div>
-          <div class="im2-mme-value">${yesOdds !== null ? Math.round(yesOdds) + '%' : 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â'}</div>
+          <div class="im2-mme-value">${yesOdds !== null ? Math.round(yesOdds) + '%' : 'N/A'}</div>
         </div>
         <div class="im2-mme-div"></div>
         <div class="im2-mme-cell">
@@ -453,7 +453,7 @@ function renderThesisCard(research) {
         <div class="im2-mme-div"></div>
         <div class="im2-mme-cell">
           <div class="im2-mme-label">EDGE</div>
-          <div class="im2-mme-value ${edge !== null ? (edge >= 0 ? 'im2-mme-yes' : 'im2-mme-no') : ''}">${edge !== null ? (edge >= 0 ? '+' : '') + Math.round(edge) + ' pts' : 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â'}</div>
+          <div class="im2-mme-value ${edge !== null ? (edge >= 0 ? 'im2-mme-yes' : 'im2-mme-no') : ''}">${edge !== null ? (edge >= 0 ? '+' : '') + Math.round(edge) + ' pts' : 'N/A'}</div>
         </div>
       </div>
 
@@ -472,19 +472,19 @@ function renderThesisCard(research) {
           <span class="im2-amount-suf">USDC</span>
         </div>
         <div class="im2-stop-row">
-          <span class="im2-stop-icon">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½</span>
+          <span class="im2-stop-icon">SL</span>
           <span class="im2-stop-text">Stop loss: <span class="im2-stop-val">${maxStopLoss}c</span></span>
         </div>
         <button class="im2-cta-btn im2-cta-btn--active" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">
           Place Bet${suggestedAction === 'SKIP' ? ' (Model says SKIP)' : ` ${escapeHtml(suggestedAction)}`}
         </button>
-        ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Open on Polymarket</a>` : ''}
+        ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">Open on Polymarket</a>` : ''}
       </div>
 
       <div class="im2-sep"></div>
       <div class="im2-bottom-actions">
-        <button class="im2-bottom-btn" data-im-action="refresh-live-markets">â†º Refresh Live Markets</button>
-        <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">â†“ PDF</button>
+        <button class="im2-bottom-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
+        <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">Download PDF</button>
         <button class="im2-bottom-btn" data-im-action="toggle-full-research" data-market-id="${escapeHtml(marketId)}">${research.showFullData ? 'Hide Details' : 'Show Full Research'}</button>
       </div>
       </div>
@@ -543,7 +543,7 @@ function renderFullResearchData(data) {
     <div class="im2-section-header-row">
       <span class="im2-section-label">AGENT PIPELINE</span>
       <span class="im2-pipeline-decision ${decisionClass}">${escapeHtml(agentDecision)}</span>
-      <span class="im2-chevron">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾</span>
+      <span class="im2-chevron">&gt;</span>
     </div>
 
     ${isFallback && allSources.length === 0 ? `<div class="im2-warning">Research pipeline is degraded right now.</div>` : ''}
@@ -574,7 +574,7 @@ function renderFullResearchData(data) {
     return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
   }).join('')}
           </div>
-          <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¨ Show more</button>
+          <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">Show more</button>
         ` : ''}
       </div>
     ` : ''}
@@ -583,7 +583,7 @@ function renderFullResearchData(data) {
     <div class="im2-section-header-row">
       <span class="im2-section-label">SOURCES</span>
       <span class="im2-sources-count">${allSources.length} total</span>
-      <span class="im2-chevron">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´</span>
+      <span class="im2-chevron">&gt;</span>
     </div>
     <div class="im2-sources-list">
       ${allSources.length ? allSources.map(source => {
@@ -758,7 +758,7 @@ function renderPortfolioResearchSection() {
 function renderMarketCard(market, isBest) {
   const marketUrl = sanitizePostUrl(market.polymarketUrl || '');
   const marketLink = market.polymarketUrl
-    ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â</a>`
+    ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open</a>`
     : '';
   const cardActionAttrs = marketUrl
     ? ` data-im-action="open-market-link" data-market-url="${escapeHtml(marketUrl)}" title="Open market on Polymarket" role="button" tabindex="0"`
@@ -770,7 +770,7 @@ function renderMarketCard(market, isBest) {
       <div class="im-market-title">${escapeHtml(market.question)}</div>
       <div class="im-market-meta">
         <span>${escapeHtml(market.volume || '$0 Vol')}</span>
-        ${market.category ? `<span>ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${escapeHtml(market.category)}</span>` : ''}
+        ${market.category ? `<span>&middot; ${escapeHtml(market.category)}</span>` : ''}
         ${marketLink}
       </div>
       <div class="im-market-odds-row">
@@ -830,7 +830,7 @@ function renderSavedTab() {
         <div class="im-market-title">${escapeHtml(item.question)}</div>
         <div class="im-market-meta">
           <span>Saved ${formatTimestamp(item.savedAt)}</span>
-          <span style="margin-left:4px;">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Saved at ${item.savedYesOdds}% YES</span>
+          <span style="margin-left:4px;">&middot; Saved at ${item.savedYesOdds}% YES</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           ${deltaHtml}
@@ -1003,11 +1003,11 @@ function bindSidebarEvents() {
       const expanded = target.getAttribute('data-expanded') === '1';
       if (expanded) {
         moreDiv.style.display = 'none';
-        target.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¨ Show more';
+        target.textContent = 'Show more';
         target.setAttribute('data-expanded', '0');
       } else {
         moreDiv.style.display = 'flex';
-        target.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ Show less';
+        target.textContent = 'Show less';
         target.setAttribute('data-expanded', '1');
       }
       return;
@@ -1063,7 +1063,7 @@ function bindSidebarEvents() {
     }
   });
 
-  // CLOB order book animation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â fires when user expands the details element
+  // CLOB order book animation ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â fires when user expands the details element
   sidebar.addEventListener('toggle', event => {
     const el = event.target;
     if (!el || !el.classList.contains('im2-ob-details') || !el.open) return;
@@ -1784,7 +1784,7 @@ function switchSidebarToSaved() {
     savedContent.innerHTML = renderSavedTab();
   }
 }
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ CLOB Animation Engine ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+// ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ CLOB Animation Engine ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
 const CLOB_ANIM = {}; // obId -> decisions []
 
 function buildClobEvents(decisions) {
@@ -1862,18 +1862,18 @@ function renderClobFrame(canvasEl, event, stepIdx, total) {
   canvasEl.innerHTML = `
     <div class="im2-ob-ticker ${matched ? 'im2-ob-ticker--match' : (isYes ? 'im2-ob-ticker--yes' : 'im2-ob-ticker--no')}">
       <span class="im2-ob-ticker-name">${escapeHtml(agent.name)}</span>
-      <span class="im2-ob-ticker-action">${matched ? 'ÃƒÂ¢Ã…Â¡Ã‚Â¡ MATCHED' : (isYes ? 'ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â² BID YES' : 'ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¼ ASK NO')} @ ${price}c ÃƒÆ’Ã¢â‚¬â€ ${agent.shares || 1}</span>
+      <span class="im2-ob-ticker-action">${matched ? 'MATCHED' : (isYes ? 'BID YES' : 'ASK NO')} @ ${price}c x ${agent.shares || 1}</span>
       <span class="im2-ob-ticker-step">${stepIdx + 1}/${total}</span>
     </div>
     <div class="im2-ob-cols">
       <div class="im2-ob-col">
         <div class="im2-ob-col-header im2-ob-col-header--yes">YES BIDS</div>
-        ${yesLevels.length ? yesLevels.map(l => bar(l, 'yes')).join('') : '<div class="im2-ob-empty-col">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</div>'}
+        ${yesLevels.length ? yesLevels.map(l => bar(l, 'yes')).join('') : '<div class="im2-ob-empty-col">-</div>'}
       </div>
       <div class="im2-ob-divider"></div>
       <div class="im2-ob-col">
         <div class="im2-ob-col-header im2-ob-col-header--no">NO ASKS</div>
-        ${noLevels.length ? noLevels.map(l => bar(l, 'no')).join('') : '<div class="im2-ob-empty-col">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</div>'}
+        ${noLevels.length ? noLevels.map(l => bar(l, 'no')).join('') : '<div class="im2-ob-empty-col">-</div>'}
       </div>
     </div>
     <div class="im2-ob-footer">
@@ -1897,16 +1897,16 @@ function playOrderBookAnimation(obId, decisions) {
   }
 
   let step = 0;
-  canvas.innerHTML = '<div class="im2-ob-empty" style="padding:16px 0;">ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¶ Replaying swarm ordersÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</div>';
+  canvas.innerHTML = '<div class="im2-ob-empty" style="padding:16px 0;">Replaying swarm orders...</div>';
 
   function tick() {
     if (step >= events.length) {
-      // Final state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â show a "done" badge
+      // Final state ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â show a "done" badge
       const footer = canvas.querySelector('.im2-ob-footer');
       if (footer) {
         const done = document.createElement('span');
         done.className = 'im2-ob-done-badge';
-        done.textContent = 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Complete';
+        done.textContent = 'Complete';
         footer.appendChild(done);
       }
       return;
@@ -1927,7 +1927,7 @@ function renderOrderBook(ob, sim) {
   if (!hasSim && !hasSnap) return '';
 
   const obId = `im2-ob-${Date.now()}`;
-  const label = hasSim ? `${sim.decisions.length} agents Ãƒâ€šÃ‚Â· click to replay` : `${yesSnap.length} YES Ãƒâ€šÃ‚Â· ${noSnap.length} NO levels`;
+  const label = hasSim ? `${sim.decisions.length} agents | click to replay` : `${yesSnap.length} YES | ${noSnap.length} NO levels`;
 
   // Store decisions for the toggle handler
   if (hasSim) CLOB_ANIM[obId] = sim.decisions;
@@ -1937,11 +1937,11 @@ function renderOrderBook(ob, sim) {
     <details class="im2-ob-details" id="${obId}">
       <summary class="im2-ob-summary">
         <span class="im2-ob-title">
-          <span class="im2-ob-icon">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â </span>
+          <span class="im2-ob-icon">OB</span>
           CLOB MARKET DEPTH
         </span>
         <span class="im2-ob-meta">${label}</span>
-        <span class="im2-ob-chevron">ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¾</span>
+        <span class="im2-ob-chevron">&gt;</span>
       </summary>
       <div class="im2-ob-body">
         <div class="im2-ob-canvas"></div>
