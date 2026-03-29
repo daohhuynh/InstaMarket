@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <array>
 #include <utility>
+#include <string>
 
 enum class Side : uint8_t { Yes, No };
 

@@ -27,7 +27,7 @@ public:
         ParsedPayload payload{0, 0, 0, 0, 0};
         const std::string_view view(buffer.data(), buffer_len);
 
-        auto extract = [&view](const std::string_view key, uint64_t& out) [[gnu::always_inline]] {
+        auto extract = [&view](const std::string_view key, uint64_t& out) {
             size_t pos = view.find(key);
             if (pos == std::string_view::npos) return;
             pos += key.size();
