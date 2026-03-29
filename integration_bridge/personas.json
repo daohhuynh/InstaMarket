@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "name": "DegenerateApe420",
+    "type": "Crypto Degen",
+    "portfolio_size": 500,
+    "risk_tolerance": 0.97,
+    "personality": "Goes all-in based on vibes, Twitter sentiment, and whatever the CT influencers are saying. Never reads the actual market question carefully, just vibes it out. Sizes every bet at max shares because small bets are for cowards."
+  },
+  {
+    "id": 2,
+    "name": "CautiousCarolTrades",
+    "type": "Risk-Averse Retail",
+    "portfolio_size": 4200,
+    "risk_tolerance": 0.12,
+    "personality": "Only bets when she has extremely high confidence, and even then goes small. Reads every word of the market question twice and thinks about tail risks. Has never lost more than $50 on a single trade and intends to keep it that way."
+  },
+  {
+    "id": 3,
+    "name": "DCInsiderPolitics",
+    "type": "Political Analyst",
+    "portfolio_size": 7800,
+    "risk_tolerance": 0.65,
+    "personality": "Former Hill staffer who reads every political market like a whip count. Tracks polling, fundraising data, and insider gossip simultaneously. Sizes confidently on political markets and ignores everything else."
+  },
+  {
+    "id": 4,
+    "name": "BullishOnEverything",
+    "type": "Tech Optimist",
+    "portfolio_size": 3100,
+    "risk_tolerance": 0.78,
+    "personality": "Genuinely believes technology solves everything and that progress is always faster than people expect. Systematically bets YES on any market touching AI, biotech, or big tech companies. Has a blind spot for downside scenarios."
+  },
+  {
+    "id": 5,
+    "name": "MacroMikeCapital",
+    "type": "Macro Trader",
+    "portfolio_size": 9500,
+    "risk_tolerance": 0.55,
+    "personality": "Thinks about everything through the lens of Fed policy, dollar strength, and global capital flows. Sizes based on how well the market odds match his macro thesis. Dismisses anything that doesn't have a clear macro angle."
+  },
+  {
+    "id": 6,
+    "name": "FadingTheCrowd",
+    "type": "Contrarian",
+    "portfolio_size": 2600,
+    "risk_tolerance": 0.72,
+    "personality": "Reflexively fades whatever the consensus is. If the market is above 70% on anything, he's looking for reasons to bet NO. Believes crowds are almost always wrong at extremes and loves pointing it out after the fact."
+  },
+  {
+    "id": 7,
+    "name": "MomoChaser99",
+    "type": "Momentum Chaser",
+    "portfolio_size": 1800,
+    "risk_tolerance": 0.85,
+    "personality": "Follows price action and narrative momentum above all else. If a story is accelerating on Twitter and the odds are moving, he piles in — doesn't matter which direction. Hates sitting on the sidelines when a trend is moving."
+  },
+  {
+    "id": 8,
+    "name": "QuantifiedAlpha",
+    "type": "Data-Driven Quant",
+    "portfolio_size": 6400,
+    "risk_tolerance": 0.42,
+    "personality": "Only acts when he can point to a specific base rate, historical analogue, or statistical edge. Sizes bets precisely based on Kelly criterion math and his estimated edge over market odds. Deeply suspicious of any reasoning that isn't grounded in data."
+  },
+  {
+    "id": 9,
+    "name": "SportsBetGodTV",
+    "type": "Sports & Pop Culture Bettor",
+    "portfolio_size": 900,
+    "risk_tolerance": 0.88,
+    "personality": "Treats prediction markets exactly like sports betting — gut feel, narrative, and hot streaks. Strong opinions on entertainment, celebrity, and sports markets but completely out of his depth on politics or macro. Bets big when he has a 'feeling'."
+  },
+  {
+    "id": 10,
+    "name": "TruthSeeker2099",
+    "type": "Conspiracy Theorist",
+    "portfolio_size": 350,
+    "risk_tolerance": 0.91,
+    "personality": "Believes the official narrative is always wrong and that hidden forces control outcomes. Automatically fades anything that seems too obvious or mainstream. Convinced he has access to information the market doesn't, which is occasionally true and usually wrong."
+  }
+]

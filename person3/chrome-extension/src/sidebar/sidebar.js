@@ -3,6 +3,8 @@
 // ============================================================
 
 const IM_MARKET_RESEARCH = {};
+/** Latest persona-sim API payload per market id (survives tab rerenders). */
+const IM_PERSONA_SIM_BY_MARKET = {};
 const IM_SAVED_MARKETS_KEY = "instamarket_saved_markets_v1";
 const IM_BET_LOG_KEY = "instamarket_bet_log_v1";
 const IM_MAX_SAVED_MARKETS = 200;
@@ -17,6 +19,16 @@ function setMarketResearch(marketId, research) {
 
 function getMarketResearch(marketId) {
   return IM_MARKET_RESEARCH[String(marketId)] || null;
+}
+
+function getPersonaSimForMarket(marketId) {
+  if (marketId == null) return null;
+  return IM_PERSONA_SIM_BY_MARKET[String(marketId)] || null;
+}
+
+function setPersonaSimForMarket(marketId, data) {
+  if (marketId == null || !data) return;
+  IM_PERSONA_SIM_BY_MARKET[String(marketId)] = data;
 }
 
 function createSidebar() {
@@ -140,8 +152,16 @@ function renderMarketsTab(activeMarketId) {
     <div class="im-section-header">Research</div>
     ${research ? renderResearchCard(research) : renderResearchPlaceholder(primary)}
 
+    ${renderPersonaSimSection(primary.id)}
+
     <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
   `;
+}
+
+function renderPersonaSimSection(marketId) {
+  const data = getPersonaSimForMarket(marketId);
+  if (!data) return "";
+  return `<div id="im-persona-sim">${renderPersonaSimTab(data)}</div>`;
 }
 
 function getRenderableMarkets() {
@@ -597,6 +617,93 @@ function formatTimestamp(value) {
 
   return `${Math.max(1, Math.round(diffMs / day))}d ago`;
 }
+
+// ── Persona Simulation ───────────────────────────────────────
+
+function renderAgentCard(agent, isYes) {
+  return `
+    <div class="im-position-row" style="flex-direction:column;align-items:flex-start;gap:4px;padding:10px 0;border-bottom:1px solid var(--pm-border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+        <div class="im-market-title" style="font-size:12px;">@${escapeHtml(agent.name)}</div>
+        <div style="font-size:11px;font-weight:700;color:${isYes ? "var(--pm-green)" : "var(--pm-red)"};">
+          ${escapeHtml(agent.decision)} · ${agent.confidence}% conf
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--pm-text-secondary);">${escapeHtml(agent.type)} · ${agent.shares} shares</div>
+      <div style="font-size:12px;color:var(--pm-text);font-style:italic;">"${escapeHtml(agent.reasoning)}"</div>
+    </div>
+  `;
+}
+
+function renderPersonaSimTab(data) {
+  if (!data) {
+    return renderEmptyPanel(
+      "Simulation unavailable",
+      "Could not load persona simulation data.",
+    );
+  }
+
+  const edge = data.simulatedYesPct - data.realYesPct;
+  const edgePositive = edge >= 0;
+  const edgeColor = edgePositive ? "var(--pm-green)" : "var(--pm-red)";
+  const edgeLabel = `${edgePositive ? "+" : ""}${edge}% ${edgePositive ? "YES" : "NO"} vs market`;
+
+  const topYes = data.topYes || [];
+  const topNo = data.topNo || [];
+
+  return `
+    <div class="im-section-header">Agent Simulation · ${data.totalAgents} traders</div>
+    <div class="im-risk-panel">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+        <div>
+          <div class="im-market-title" style="font-size:13px;">Agents: ${data.simulatedYesPct}% YES / ${data.simulatedNoPct}% NO</div>
+          <div style="font-size:11px;color:var(--pm-text-secondary);">Market: ${data.realYesPct}% YES / ${data.realNoPct}% NO</div>
+        </div>
+        <div style="font-size:13px;font-weight:800;color:${edgeColor};">${edgeLabel}</div>
+      </div>
+
+      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:16px;">
+        <div style="width:${data.simulatedYesPct}%;background:var(--pm-green);transition:width 0.4s ease;"></div>
+        <div style="width:${data.simulatedNoPct}%;background:var(--pm-red);transition:width 0.4s ease;"></div>
+      </div>
+
+      ${
+        topYes.length
+          ? `
+        <div style="font-size:11px;font-weight:700;color:var(--pm-green);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Bullish Agents</div>
+        ${topYes.map((a) => renderAgentCard(a, true)).join("")}
+      `
+          : ""
+      }
+
+      ${
+        topNo.length
+          ? `
+        <div style="font-size:11px;font-weight:700;color:var(--pm-red);text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 4px;">Bearish Agents</div>
+        ${topNo.map((a) => renderAgentCard(a, false)).join("")}
+      `
+          : ""
+      }
+
+    </div>
+  `;
+}
+
+window.renderPersonaSimInSidebar = function (data, marketId) {
+  const id =
+    marketId != null
+      ? String(marketId)
+      : IM_ACTIVE_MARKET_ID != null
+        ? String(IM_ACTIVE_MARKET_ID)
+        : null;
+  if (!id || !data) return;
+  setPersonaSimForMarket(id, data);
+  const marketsContent = document.getElementById("im-tab-markets");
+  if (marketsContent && marketsContent.classList.contains("active")) {
+    rerenderMarketsTab();
+  }
+};
 
 function escapeHtml(value) {
   return String(value)

@@ -9,6 +9,8 @@
   const IM_TRADE_AMOUNT_MIN = 1;
   const IM_TRADE_AMOUNT_MAX = 1000;
   const IM_TRADE_AMOUNT_DEFAULT = 250;
+  /** Prevents duplicate /api/persona-sim runs (10 Bedrock calls each). */
+  let imPersonaSimInFlight = false;
 
   // ── Wait for DOM ready ──────────────────────────────────
   async function init() {
@@ -55,15 +57,6 @@
     toggle.classList.toggle("im-collapsed", collapsed);
     toggle.innerHTML = collapsed ? "❮" : "❯";
     if (main) main.classList.toggle("im-sidebar-hidden", collapsed);
-  }
-
-  function readJsonLocalStorage(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
   }
 
   // ── Tweet observation ────────────────────────────────────
@@ -204,9 +197,45 @@
 
     layer.querySelector(".im-research-btn").addEventListener("click", (e) => {
       e.stopPropagation();
+      if (imPersonaSimInFlight) {
+        showToast("Persona simulation already running — please wait.");
+        return;
+      }
       persistResearch(market.id, researchSummary);
       showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
       switchSidebarToMarkets(market.id);
+
+      imPersonaSimInFlight = true;
+      const marketIdForSim = market.id;
+      fetch("http://localhost:3000/api/persona-sim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tweetText, market }),
+        signal: AbortSignal.timeout(120000),
+      })
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}));
+          if (r.status === 409) {
+            showToast(
+              data.error ||
+                "A simulation is already running on the server. Try again shortly.",
+            );
+            return;
+          }
+          if (!r.ok) {
+            showToast(data.error || "Persona simulation failed.");
+            return;
+          }
+          if (typeof window.renderPersonaSimInSidebar === "function") {
+            window.renderPersonaSimInSidebar(data, marketIdForSim);
+          }
+        })
+        .catch(() => {
+          showToast("Persona simulation failed or timed out.");
+        })
+        .finally(() => {
+          imPersonaSimInFlight = false;
+        });
     });
 
     const pmLink = layer.querySelector(".im-pm-link");
