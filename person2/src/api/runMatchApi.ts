@@ -1,4 +1,5 @@
 import cors from "cors";
+// @ts-ignore
 import { config as loadDotEnv } from "dotenv";
 import express, { type Request, type Response } from "express";
 import { existsSync, readFileSync } from "node:fs";
@@ -1275,7 +1276,7 @@ async function main(): Promise<void> {
 
   app.use(
     cors({
-      origin: (_origin, callback) => {
+      origin: (_origin: any, callback: any) => {
         if (allowAllOrigins) {
           callback(null, true);
           return;

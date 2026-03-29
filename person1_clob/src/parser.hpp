@@ -43,10 +43,11 @@ public:
         size_t side_pos = view.find("\"side\":");
         if (side_pos != std::string_view::npos) {
             side_pos += 7;
-            while (side_pos < view.size() && (view[side_pos] == ' ' || view[side_pos] == '"')) ++side_pos;
-            payload.side = (view[side_pos] == 'N') ? 1 : 0;
+            while (side_pos < view.size() && (view[side_pos] == ' ' || view[side_pos] == '"' || view[side_pos] == ':')) ++side_pos;
+            if (side_pos < view.size()) [[likely]] {
+                payload.side = (view[side_pos] == 'N' || view[side_pos] == '1');
+            }
         }
-
         return payload;
     }
 };

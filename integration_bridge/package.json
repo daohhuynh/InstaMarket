@@ -11,6 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "dotenv": "^16.4.7",
+    "@aws-sdk/client-bedrock-runtime": "^3.758.0",
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.100.1",
     "cors": "^2.8.6",
