@@ -489,6 +489,9 @@ function renderThesisCard(research) {
         suggestedAmount,
         marketId,
       })}
+      
+      ${renderSimulationData(research.simulation)}
+      
     </div>
   `;
 }
@@ -1713,6 +1716,49 @@ function switchSidebarToSaved() {
     savedContent.classList.add('active');
     savedContent.innerHTML = renderSavedTab();
   }
+}
+function renderSimulationData(sim) {
+  if (!sim || !sim.decisions) return ''; 
+  
+  const edgeClass = sim.edgeVsMarket.includes('+') ? 'im2-pipeline-yes' : 'im2-pipeline-no';
+
+  return `
+    <div class="im2-sep" style="margin: 15px 0; border-top: 1px solid rgba(255,255,255,0.1);"></div>
+    <div class="im2-section-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <span class="im2-section-label" style="font-weight:bold; color:#8899a6; font-size:11px; letter-spacing:0.5px;">AI SWARM SIMULATION (${sim.totalAgents} AGENTS)</span>
+      <span class="im2-pipeline-decision ${edgeClass}" style="font-size:12px; font-weight:bold; color: ${edgeClass === 'im2-pipeline-yes' ? '#00ba7c' : '#f91880'};">${escapeHtml(sim.edgeVsMarket)}</span>
+    </div>
+    
+    <div class="im2-scenarios" style="margin-top: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px;">
+      <div class="im2-scenario-row" style="display:flex; align-items:center; margin-bottom: 6px;">
+        <span class="im2-scenario-name" style="width: 70px; font-size: 12px; color: #e7e9ea;">Swarm YES</span>
+        <div class="im2-bar-track" style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; margin: 0 10px;">
+          <div class="im2-bar-fill" style="height:100%; border-radius:3px; background:#00ba7c; width:${sim.simulatedYesPct}%"></div>
+        </div>
+        <span class="im2-scenario-pct" style="font-size: 12px; color: #00ba7c; font-weight:bold;">${sim.simulatedYesPct}%</span>
+      </div>
+      <div class="im2-scenario-row" style="display:flex; align-items:center;">
+        <span class="im2-scenario-name" style="width: 70px; font-size: 12px; color: #e7e9ea;">Swarm NO</span>
+        <div class="im2-bar-track" style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; margin: 0 10px;">
+          <div class="im2-bar-fill" style="height:100%; border-radius:3px; background:#f91880; width:${sim.simulatedNoPct}%"></div>
+        </div>
+        <span class="im2-scenario-pct" style="font-size: 12px; color: #f91880; font-weight:bold;">${sim.simulatedNoPct}%</span>
+      </div>
+    </div>
+
+    <div class="im2-section-label" style="margin-top:15px; font-weight:bold; color:#8899a6; font-size:11px; letter-spacing:0.5px;">TOP AGENT REASONING</div>
+    <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+      ${sim.decisions.slice(0, 3).map(agent => `
+        <div class="im2-source-card" style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; font-size: 12px; color: #e7e9ea;">
+          <div class="im2-source-header" style="display:flex; justify-content:space-between; margin-bottom: 4px;">
+            <span class="im2-source-platform" style="font-weight:bold;">${escapeHtml(agent.name)}</span>
+            <span class="im2-rel-score" style="color: ${agent.decision === 'YES' ? '#00ba7c' : '#f91880'}; font-weight:bold;">${agent.decision} - ${agent.confidence}%</span>
+          </div>
+          <div class="im2-source-snippet" style="opacity: 0.8; line-height: 1.4;">"${escapeHtml(agent.reasoning)}"</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 window.setMarketResearch = setMarketResearch;

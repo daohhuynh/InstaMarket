@@ -525,6 +525,19 @@
             : 'No thesis payload from backend.';
         throw new Error(errorMessage);
       }
+      let simData = null;
+      try {
+        const simReq = await fetch("http://localhost:3000/api/persona-sim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tweetText, market })
+        });
+        if (simReq.ok) {
+          simData = await simReq.json();
+        }
+      } catch (err) {
+        console.warn("[InstaMarket] Simulation fetch failed:", err);
+      }
 
       stopLoadingUpdates();
       persistResearch(market.id, {
@@ -550,6 +563,7 @@
           top_sources: Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources : [],
           all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
         },
+        simulation: simData,
         showFullData: false
       });
       focusSidebarOnPortfolioForResearch(market.id);
