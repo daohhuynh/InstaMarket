@@ -10,7 +10,6 @@
   // ── Wait for DOM ready ──────────────────────────────────
   async function init() {
     mountSidebar();
-    mountDittoButton();
     await hydrateMarketUniverse();
     observeTweets();
   }
@@ -74,30 +73,23 @@
   }
 
   function alignDittoToTwitterButtons() {
-
-    const btn = document.getElementById('im-ditto-btn');
+    const btn = document.getElementById("im-ditto-btn");
 
     const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
 
     if (!btn || !grokEl) return;
 
-
-
     const grokRect = grokEl.getBoundingClientRect();
 
     const btnSize = 56; // Standard size of Grok/Chat buttons
 
-    const gap = 16;     // Standard spacing
-
-
+    const gap = 16; // Standard spacing
 
     // We use RIGHT and BOTTOM to keep him locked to that corner
 
     const rightOffset = window.innerWidth - grokRect.right;
 
-    const bottomOffset = (window.innerHeight - grokRect.top) + gap;
-
-
+    const bottomOffset = window.innerHeight - grokRect.top + gap;
 
     // !important on everything to crush that ghost box
 
@@ -139,14 +131,11 @@
 
     `;
 
-
-
     // Make Ditto fill the space so he matches the button size
 
-    const img = btn.querySelector('img');
+    const img = btn.querySelector("img");
 
     if (img) {
-
       img.style.cssText = `
 
         width: 56px !important;
@@ -158,43 +147,7 @@
         filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4)) !important;
 
       `;
-
     }
-
-  }
-
-
-
-  function mountDittoButton() {
-
-    if (document.getElementById('im-ditto-btn')) return;
-
-    const btn = document.createElement('button');
-
-    btn.id = 'im-ditto-btn';
-
-    btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto">`;
-
-    document.body.appendChild(btn);
-
-
-
-    // Initial alignment
-
-    alignDittoToTwitterButtons();
-
-
-
-    // Re-align whenever the window moves or resizes
-
-    window.addEventListener('resize', alignDittoToTwitterButtons);
-
-    window.addEventListener('scroll', alignDittoToTwitterButtons, true);
-
-    
-
-    btn.addEventListener('click', toggleDittoModal);
-
   }
 
   function observeTwitterPanels() {
