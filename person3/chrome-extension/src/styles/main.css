@@ -364,6 +364,23 @@
   gap: 10px;
 }
 
+.im-market-card.im-market-card-link {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.im-market-card.im-market-card-link:hover {
+  border-color: rgba(59, 130, 246, 0.65);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+}
+
+.im-market-card.im-market-card-link:focus-visible {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.85);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+}
+
 .im-market-card.best-match {
   border-color: var(--pm-green);
   box-shadow: 0 0 0 1px rgba(0,200,83,0.2);

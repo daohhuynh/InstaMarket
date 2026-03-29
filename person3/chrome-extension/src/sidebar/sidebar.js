@@ -733,12 +733,16 @@ function renderPortfolioResearchSection() {
 }
 
 function renderMarketCard(market, isBest) {
+  const marketUrl = sanitizePostUrl(market.polymarketUrl || '');
   const marketLink = market.polymarketUrl
     ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
     : '';
+  const cardActionAttrs = marketUrl
+    ? ` data-im-action="open-market-link" data-market-url="${escapeHtml(marketUrl)}" title="Open market on Polymarket" role="button" tabindex="0"`
+    : '';
 
   return `
-    <div class="im-market-card ${isBest ? 'best-match' : ''}">
+    <div class="im-market-card ${isBest ? 'best-match' : ''} ${marketUrl ? 'im-market-card-link' : ''}"${cardActionAttrs}>
       ${isBest ? '<div class="im-best-match-badge">Best Match</div>' : ''}
       <div class="im-market-title">${escapeHtml(market.question)}</div>
       <div class="im-market-meta">
@@ -866,6 +870,23 @@ function bindSidebarEvents() {
       const opened = openUrlInNewTab(postUrl);
       if (!opened) {
         showToast('Could not open post in a new tab.');
+      }
+      return;
+    }
+
+    if (action === 'open-market-link') {
+      if (event.target?.closest?.('a[href]')) {
+        return;
+      }
+
+      const marketUrl = sanitizePostUrl(target.getAttribute('data-market-url') || '');
+      if (!marketUrl) {
+        showToast('No Polymarket URL available for this market.');
+        return;
+      }
+      const opened = openUrlInNewTab(marketUrl);
+      if (!opened) {
+        showToast('Could not open Polymarket in a new tab.');
       }
       return;
     }
@@ -1004,7 +1025,7 @@ function bindSidebarEvents() {
   });
 
   sidebar.addEventListener('keydown', event => {
-    const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"]');
+    const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"], [data-im-action="open-market-link"]');
     if (!target) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
