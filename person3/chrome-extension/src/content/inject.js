@@ -1,11 +1,13 @@
 // ============================================================
-// INJECT.JS â€” entry point, injects tweet layers + sidebar
+// INJECT.JS – entry point, injects tweet layers + sidebar
 // ============================================================
 
 (function () {
   'use strict';
 
+  const IM_SITE = detectSite();
   let sidebarMounted = false;
+  let wapoArticleInjectionPromise = null;
   const IM_TRADE_AMOUNT_MIN = 1;
   const IM_TRADE_AMOUNT_MAX = 1000;
   const IM_TRADE_AMOUNT_DEFAULT = 250;
@@ -13,31 +15,51 @@
   let imViewportSyncRaf = 0;
   let imLastViewportMarketId = '';
 
-  // â”€â”€ Wait for DOM ready â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Wait for DOM ready ──────────────────────────────────────────
   async function init() {
-    mountSidebar();
     await hydrateMarketUniverse();
-    observeTweets();
-    window.addEventListener('resize', syncAllTweetLayerAlignments);
-    window.addEventListener('scroll', requestViewportMarketSync, { passive: true });
-    window.addEventListener('resize', requestViewportMarketSync);
+
+    if (IM_SITE === 'twitter') {
+      mountSidebar('twitter');
+      observeTweets();
+      window.addEventListener('resize', syncAllTweetLayerAlignments);
+      window.addEventListener('scroll', requestViewportMarketSync, { passive: true });
+      window.addEventListener('resize', requestViewportMarketSync);
+      return;
+    }
+
+    if (IM_SITE === 'wapo') {
+      observeWashingtonPostArticle();
+      window.addEventListener('resize', syncWashingtonPostInlineCardLayoutFromDom);
+    }
   }
 
-  // â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  function mountSidebar() {
+  // ── Sidebar ─────────────────────────────────────────────────────────────────────────────────
+  function mountSidebar(site = IM_SITE) {
     if (sidebarMounted) return;
     sidebarMounted = true;
+    document.documentElement.setAttribute('data-im-site', site);
+    document.body?.setAttribute('data-im-site', site);
     createSidebar();
+    const sidebar = document.getElementById('im-sidebar');
+    if (sidebar) {
+      sidebar.setAttribute('data-im-site', site);
+    }
     mountCollapseToggle();
 
-    // Hide Twitter's right sidebar column (we replace it), but don't touch their floating buttons
+    // Site-specific page layout adjustments.
+    const existingStyle = document.getElementById('im-site-layout-style');
+    if (existingStyle) existingStyle.remove();
     const style = document.createElement('style');
+    style.id = 'im-site-layout-style';
     style.textContent = `
-      @media (min-width: 1280px) {
-        main[role="main"] { margin-right: 380px !important; transition: margin-right 0.3s ease; }
-        main[role="main"].im-sidebar-hidden { margin-right: 0 !important; }
-        [data-testid="sidebarColumn"] { display: none !important; }
-      }
+      ${site === 'twitter' ? `
+        @media (min-width: 1280px) {
+          main[role="main"] { margin-right: 380px !important; transition: margin-right 0.3s ease; }
+          main[role="main"].im-sidebar-hidden { margin-right: 0 !important; }
+          [data-testid="sidebarColumn"] { display: none !important; }
+        }
+      ` : ''}
     `;
     document.head.appendChild(style);
   }
@@ -68,9 +90,11 @@
       collapsed ? 'Expand InstaMarket sidebar' : 'Collapse InstaMarket sidebar'
     );
     if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
+    document.documentElement.classList.toggle('im-sidebar-hidden', collapsed);
+    document.body?.classList.toggle('im-sidebar-hidden', collapsed);
   }
 
-  // â”€â”€ Tweet observation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Tweet observation ────────────────────────────────────────────────
   function observeTweets() {
     const observer = new MutationObserver(() => {
       document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(tweet => {
@@ -283,6 +307,16 @@
     });
   }
 
+  function findTweetContentAnchor(tweet) {
+    return (
+      tweet.querySelector('[data-testid="tweetText"]') ||
+      tweet.querySelector('div[lang]') ||
+      tweet.querySelector('[data-testid="tweetPhoto"]')?.closest('div[dir="ltr"], div[dir="auto"], div') ||
+      tweet.querySelector('[role="link"] div[dir="auto"]')
+    );
+  }
+
+  // ── Viewport market sync ─────────────────────────────────────────────
   function requestViewportMarketSync() {
     if (imViewportSyncRaf) return;
     imViewportSyncRaf = window.requestAnimationFrame(() => {
@@ -339,15 +373,264 @@
     window.setSidebarActiveMarketFromViewport(bestMarketId);
   }
 
-  function findTweetContentAnchor(tweet) {
-    return (
-      tweet.querySelector('[data-testid="tweetText"]') ||
-      tweet.querySelector('div[lang]') ||
-      tweet.querySelector('[data-testid="tweetPhoto"]')?.closest('div[dir="ltr"], div[dir="auto"], div') ||
-      tweet.querySelector('[role="link"] div[dir="auto"]')
-    );
+  // ── Washington Post ──────────────────────────────────────────────────
+  function observeWashingtonPostArticle() {
+    const observer = new MutationObserver(() => {
+      maybeInjectWashingtonPostArticle().catch(error => {
+        console.warn('[InstaMarket] Washington Post injection error:', error);
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    maybeInjectWashingtonPostArticle().catch(error => {
+      console.warn('[InstaMarket] Washington Post injection error:', error);
+    });
   }
 
+  async function maybeInjectWashingtonPostArticle() {
+    if (IM_SITE !== 'wapo') return;
+    if (!isWashingtonPostArticlePage()) return;
+    if (wapoArticleInjectionPromise) return wapoArticleInjectionPromise;
+
+    const articleContext = extractWashingtonPostArticleContext();
+    if (!articleContext?.articleRoot || !articleContext?.headline || !articleContext?.articleText) {
+      return;
+    }
+    if (['pending', 'no-match', 'true'].includes(articleContext.articleRoot.dataset.imInjected || '')) {
+      return;
+    }
+
+    wapoArticleInjectionPromise = injectWashingtonPostArticle(articleContext)
+      .catch(error => {
+        console.warn('[InstaMarket] Washington Post article injection failed:', error);
+      })
+      .finally(() => {
+        wapoArticleInjectionPromise = null;
+      });
+
+    return wapoArticleInjectionPromise;
+  }
+
+  async function injectWashingtonPostArticle(articleContext) {
+    const { articleRoot, articleText } = articleContext;
+    articleRoot.dataset.imInjected = 'pending';
+    try {
+      const match = await findBestMarketForTweetWithAi(articleText);
+      if (!match || !match.market) {
+        articleRoot.dataset.imInjected = 'no-match';
+        return;
+      }
+
+      const market = match.market;
+      const researchSummary = buildResearchSummary(articleText, match);
+      persistResearch(market.id, researchSummary);
+
+      mountSidebar('wapo');
+      document.getElementById('im-sidebar')?.classList.remove('im-collapsed');
+      document.getElementById('im-sidebar-toggle')?.classList.remove('im-collapsed');
+      document.body?.classList.remove('im-sidebar-hidden');
+      document.documentElement.classList.remove('im-sidebar-hidden');
+      mountWashingtonPostInlineCard({
+        articleContext,
+        market,
+        researchSummary,
+        articleText,
+      });
+      switchSidebarToMarkets(market.id);
+      articleRoot.dataset.imInjected = 'true';
+    } catch (error) {
+      articleRoot.dataset.imInjected = 'error';
+      throw error;
+    }
+  }
+
+  function mountWashingtonPostInlineCard({ articleContext, market, researchSummary, articleText }) {
+    if (!articleContext?.headerBlock || !market) return;
+    if (document.getElementById('im-wapo-inline-card')) return;
+
+    document.documentElement.setAttribute('data-im-site', 'wapo');
+    document.body?.setAttribute('data-im-site', 'wapo');
+
+    const safeMarketId = escapeHtml(String(market.id));
+    const safeQuestion = escapeHtml(market.question || 'Matched market');
+    const safeVolume = escapeHtml(market.volume || '$0 Vol');
+    const safeMarketUrl = escapeHtml(market.polymarketUrl || '');
+
+    const questionMarkup = safeMarketUrl
+      ? `<a class="im-market-question-link" href="${safeMarketUrl}" target="_blank" rel="noopener noreferrer" title="Open on Polymarket">${safeQuestion}</a>`
+      : safeQuestion;
+
+    const card = document.createElement('aside');
+    card.id = 'im-wapo-inline-card';
+    card.className = 'im-wapo-inline-card';
+    card.innerHTML = `
+      <div class="im-wapo-inline-kicker">InstaMarket Signal</div>
+      <div class="im-wapo-inline-shell">
+        <div class="im-wapo-inline-meta">
+          <span class="im-wapo-inline-label">Relevant Bet</span>
+        </div>
+        <div class="im-market-shell im-wapo-market-shell">
+          <div class="im-market-header">
+            <span class="im-market-question">${questionMarkup}</span>
+          </div>
+          <div class="im-probability-panel">
+            <div class="im-probability-meta-row">
+              <button class="im-save-btn" data-market="${safeMarketId}" title="Save market">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                </svg>
+              </button>
+              <div class="im-side-choice im-side-choice-yes">
+                <span class="im-side-choice-label">YES</span>
+                <span class="im-side-choice-pct">${market.yesOdds}%</span>
+              </div>
+              <div class="im-volume-inline">${safeVolume}</div>
+              <div class="im-side-choice im-side-choice-no">
+                <span class="im-side-choice-label">NO</span>
+                <span class="im-side-choice-pct">${market.noOdds}%</span>
+              </div>
+              <div class="im-pm-link" title="View on Polymarket" data-market-url="${safeMarketUrl}">
+                <svg class="im-pm-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none"/>
+                </svg>
+              </div>
+            </div>
+            <div class="im-probability-bar" aria-label="Market odds">
+              <div class="im-probability-fill im-probability-fill-yes" style="width:${market.yesOdds}%"></div>
+              <div class="im-probability-fill im-probability-fill-no" style="width:${market.noOdds}%"></div>
+            </div>
+            <div class="im-trade-choice-row">
+              <button class="im-trade-choice im-trade-choice-yes" data-market="${safeMarketId}" data-side="YES">
+                Bet YES
+              </button>
+              <div class="im-inline-controls">
+                <label class="im-amount-pill" aria-label="Trade amount in dollars">
+                  <span class="im-currency-symbol">$</span>
+                  <input
+                    class="im-amount-input"
+                    type="number"
+                    min="${IM_TRADE_AMOUNT_MIN}"
+                    max="${IM_TRADE_AMOUNT_MAX}"
+                    step="1"
+                    value="${IM_TRADE_AMOUNT_DEFAULT}"
+                    inputmode="numeric"
+                  />
+                </label>
+                <button class="im-research-btn im-wapo-research-btn" data-market="${safeMarketId}">
+                  Research
+                </button>
+              </div>
+              <button class="im-trade-choice im-trade-choice-no" data-market="${safeMarketId}" data-side="NO">
+                Bet NO
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    bindTradeAmountControls(card);
+
+    card.querySelectorAll('[data-side][data-market]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        const side = button.dataset.side;
+        const amount = getSelectedTradeAmount(card);
+        showToast(`Bet placed: $${formatTradeAmount(amount)} ${side} on "${market.question.slice(0, 40)}..."`);
+        if (typeof window.recordSidebarBet === 'function') {
+          window.recordSidebarBet(String(market.id), side, amount, { postUrl: articleContext.postUrl || '' });
+        }
+        persistResearch(market.id, researchSummary);
+        switchSidebarToMarkets(market.id);
+      });
+    });
+
+    card.querySelector('.im-save-btn')?.addEventListener('click', event => {
+      event.stopPropagation();
+      if (typeof window.saveMarketForLater === 'function') {
+        const saved = window.saveMarketForLater(market.id, { postUrl: articleContext.postUrl || '' });
+        showToast(saved ? `Saved: "${market.question.slice(0, 40)}..."` : 'Already saved.');
+        if (typeof window.switchSidebarToSaved === 'function') {
+          window.switchSidebarToSaved();
+        }
+      }
+    });
+
+    const pmLink = card.querySelector('.im-pm-link');
+    pmLink?.addEventListener('click', event => {
+      event.stopPropagation();
+      const targetUrl = pmLink.getAttribute('data-market-url');
+      if (targetUrl) {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      }
+    });
+
+    const questionLink = card.querySelector('.im-market-question-link');
+    questionLink?.addEventListener('click', event => {
+      event.stopPropagation();
+    });
+
+    card.querySelector('.im-wapo-research-btn')?.addEventListener('click', event => {
+      event.stopPropagation();
+      runLiveResearchForContext({
+        market,
+        contentText: articleText,
+        context: articleContext,
+        fallbackResearchSummary: researchSummary,
+      }).catch((error) => {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unknown thesis engine error.';
+        persistResearch(market.id, {
+          type: 'thesis',
+          status: 'error',
+          title: `Research failed for "${market.question}"`,
+          summary: 'Research button only supports thesis-engine output. Parser fallback was skipped.',
+          confidence: 0,
+          method: 'Thesis engine error',
+          matchedTerms: [],
+          steps: [
+            `Error: ${message}`,
+            'Check that the research endpoint points to /v1/research-thesis on localhost:8787.',
+            'Then rerun Research.',
+          ]
+        });
+        showToast('Research failed. See sidebar details.');
+        switchSidebarToMarkets(market.id);
+      });
+    });
+
+    articleContext.headerBlock.insertAdjacentElement('afterend', card);
+    syncWashingtonPostInlineCardLayout(card, articleContext.headerBlock);
+    window.requestAnimationFrame(() => syncWashingtonPostInlineCardLayout(card, articleContext.headerBlock));
+    window.setTimeout(() => syncWashingtonPostInlineCardLayout(card, articleContext.headerBlock), 180);
+  }
+
+  function syncWashingtonPostInlineCardLayout(card, headerBlock) {
+    if (!card || !headerBlock || !card.isConnected || !headerBlock.isConnected) return;
+
+    const headerRect = headerBlock.getBoundingClientRect();
+    if (!headerRect.width) return;
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const leftInset = Math.max(0, Math.round(headerRect.left));
+    const rightInset = Math.max(0, Math.round(viewportWidth - headerRect.right));
+
+    card.style.maxWidth = `${Math.round(headerRect.width)}px`;
+    card.style.width = `${Math.round(headerRect.width)}px`;
+    card.style.marginLeft = `${leftInset}px`;
+    card.style.marginRight = `${rightInset}px`;
+  }
+
+  function syncWashingtonPostInlineCardLayoutFromDom() {
+    const card = document.getElementById('im-wapo-inline-card');
+    const headerBlock = document.querySelector('[data-testid="article-topper"]');
+    if (!card || !headerBlock) return;
+    syncWashingtonPostInlineCardLayout(card, headerBlock);
+  }
+
+  // ── Shared UI helpers ────────────────────────────────────────────────
   function bindTradeAmountControls(layer) {
     const amountInput = layer.querySelector('.im-amount-input');
     const amountPill = layer.querySelector('.im-amount-pill');
@@ -427,6 +710,7 @@
     return null;
   }
 
+  // ── Research (tweets) ────────────────────────────────────────────────
   async function runLiveResearch({ market, tweet, tweetText, fallbackResearchSummary }) {
     const context = extractTweetContext(tweet);
     const completedSteps = [];
@@ -581,6 +865,197 @@
     }
   }
 
+  // ── Research (WaPo / context-based) ─────────────────────────────────
+  async function runLiveResearchForContext({ market, contentText, context, fallbackResearchSummary }) {
+    const completedSteps = [];
+    let currentStep = 'Initialising research pipeline...';
+
+    function pushStep(label) {
+      if (!label) return;
+      completedSteps.push(label);
+      persistResearch(market.id, {
+        type: 'thesis',
+        status: 'loading',
+        title: `Researching "${market.question}"`,
+        summary: currentStep,
+        completedSteps: [...completedSteps],
+        confidence: 0,
+        matchedTerms: [],
+        steps: []
+      });
+      if (typeof window.rerenderPortfolioTabIfVisible === 'function') {
+        window.rerenderPortfolioTabIfVisible();
+      }
+    }
+
+    persistResearch(market.id, {
+      type: 'thesis',
+      status: 'loading',
+      title: `Researching "${market.question}"`,
+      summary: currentStep,
+      completedSteps: [],
+      confidence: 0,
+      matchedTerms: [],
+      steps: []
+    });
+    switchSidebarToMarkets(market.id);
+    showToast('Running live research...');
+
+    if (typeof runResearchThesisForTweet !== 'function') {
+      throw new Error('runResearchThesisForTweet helper unavailable');
+    }
+
+    const response = await runResearchThesisForTweet({
+      tweetText: contentText,
+      market,
+      postUrl: context?.postUrl,
+      postAuthor: context?.postAuthor,
+      postTimestamp: context?.postTimestamp,
+      onProgress: (event) => {
+        if (event.type === 'agent_start') {
+          currentStep = event.message;
+        }
+        const label = formatProgressStep(event);
+        if (label) pushStep(label);
+      }
+    });
+
+    if (!response || typeof response !== 'object' || !response.thesis) {
+      const errorMessage =
+        typeof response?.error === 'string' && response.error
+          ? response.error
+          : 'No thesis payload from backend.';
+      throw new Error(errorMessage);
+    }
+
+    persistResearch(market.id, {
+      type: 'thesis',
+      status: 'ready',
+      title: market.question,
+      summary: response.thesis.explanation || fallbackResearchSummary.summary,
+      confidence: Number(response.thesis.confidence) || 0,
+      method: response.model_mode === 'bedrock' ? 'Bedrock Nova Lite thesis engine' : 'Heuristic thesis fallback',
+      matchedTerms: [],
+      steps: [
+        `Report ID: ${response.dossier?.report_id || 'n/a'}`,
+        `Sources: x=${response.dossier?.source_counts?.x ?? 0}, youtube=${response.dossier?.source_counts?.youtube ?? 0}, reddit=${response.dossier?.source_counts?.reddit ?? 0}, news=${response.dossier?.source_counts?.news ?? 0}, google=${response.dossier?.source_counts?.google ?? 0}, tiktok=${response.dossier?.source_counts?.tiktok ?? 0}`,
+        ...(Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources.slice(0, 4).map(source => `${source.source_type.toUpperCase()}: ${source.title}`) : [])
+      ],
+      thesis: response.thesis,
+      dossier: {
+        report_id: response.dossier?.report_id || '',
+        is_fallback: Boolean(response.dossier?.is_fallback),
+        source_counts: response.dossier?.source_counts || {},
+        briefing_lines: Array.isArray(response.dossier?.briefing_lines) ? response.dossier.briefing_lines : [],
+        collection_errors: Array.isArray(response.dossier?.collection_errors) ? response.dossier.collection_errors : [],
+        top_sources: Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources : [],
+        all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
+      },
+      showFullData: false
+    });
+    switchSidebarToMarkets(market.id);
+    showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
+  }
+
+  // ── Site detection + WaPo helpers ───────────────────────────────────
+  function detectSite() {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname === 'twitter.com' || hostname === 'www.twitter.com' || hostname === 'x.com' || hostname === 'www.x.com') {
+      return 'twitter';
+    }
+    if (hostname === 'washingtonpost.com' || hostname.endsWith('.washingtonpost.com')) {
+      return 'wapo';
+    }
+    return 'unknown';
+  }
+
+  function isWashingtonPostArticlePage() {
+    if (IM_SITE !== 'wapo') return false;
+    const path = window.location.pathname || '';
+    if (!path || path === '/' || path.split('/').filter(Boolean).length < 3) {
+      return false;
+    }
+    const headline = document.querySelector('main h1, article h1, h1');
+    const article = document.querySelector('article');
+    return Boolean(headline && article);
+  }
+
+  function extractWashingtonPostArticleContext() {
+    const articleRoot = document.querySelector('article');
+    const headline = articleRoot?.querySelector('h1') || document.querySelector('main h1, h1');
+    if (!articleRoot || !headline) return null;
+
+    const headerBlock = findWashingtonPostHeaderBlock(headline, articleRoot);
+    const paragraphs = Array.from(articleRoot.querySelectorAll('p'))
+      .map(node => cleanArticleText(node.innerText))
+      .filter(text => text && text.length > 35)
+      .slice(0, 14);
+    const dek = findWashingtonPostDek(articleRoot, headline);
+    const articleText = [headline.innerText, dek, ...paragraphs].filter(Boolean).join('\n\n').trim();
+
+    if (!articleText || articleText.length < 160) {
+      return null;
+    }
+
+    return {
+      articleRoot,
+      headline,
+      headerBlock,
+      articleText,
+      postUrl: window.location.href,
+      postAuthor: extractWashingtonPostAuthor(articleRoot),
+      postTimestamp: extractWashingtonPostTimestamp(articleRoot),
+    };
+  }
+
+  function findWashingtonPostHeaderBlock(headline, articleRoot) {
+    const explicitTopper =
+      articleRoot?.querySelector('[data-testid="article-topper"]') ||
+      document.querySelector('[data-testid="article-topper"]');
+    if (explicitTopper) {
+      return explicitTopper;
+    }
+
+    let node = headline?.parentElement || null;
+    while (node && node !== articleRoot) {
+      const text = cleanArticleText(node.innerText);
+      if (text && text.length > 120) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return headline?.parentElement || headline;
+  }
+
+  function findWashingtonPostDek(articleRoot, headline) {
+    const candidates = [
+      headline?.nextElementSibling,
+      articleRoot?.querySelector('h2'),
+      articleRoot?.querySelector('p'),
+    ];
+    for (const candidate of candidates) {
+      const text = cleanArticleText(candidate?.innerText || '');
+      if (text && text.length > 40 && text !== cleanArticleText(headline?.innerText || '')) {
+        return text;
+      }
+    }
+    return '';
+  }
+
+  function extractWashingtonPostAuthor(articleRoot) {
+    const authorCandidate = articleRoot?.querySelector('a[rel="author"], [data-cy*="author"] a, a[href*="/people/"], a[href*="/staff/"]');
+    return cleanArticleText(authorCandidate?.innerText || '');
+  }
+
+  function extractWashingtonPostTimestamp(articleRoot) {
+    const timeEl = articleRoot?.querySelector('time');
+    return timeEl?.getAttribute('datetime') || cleanArticleText(timeEl?.innerText || '');
+  }
+
+  function cleanArticleText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
   function extractTweetContext(tweet) {
     const timeAnchor = tweet?.querySelector('time')?.closest('a');
     const authorAnchor = tweet?.querySelector('a[role="link"][href^="/"]');
@@ -627,7 +1102,7 @@
     }
   }
 
-  // â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Boot ─────────────────────────────────────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       init().catch(error => console.error('[InstaMarket] Init failed:', error));

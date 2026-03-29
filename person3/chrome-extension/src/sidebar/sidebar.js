@@ -70,7 +70,7 @@ function renderPortfolioTab() {
   if (!betLog.length) {
     return renderEmptyPanel(
       'No portfolio data yet',
-      'Place your first YES/NO bet from a tweet card and your activity will appear here.'
+      'Place your first YES/NO bet from a matched story card and your activity will appear here.'
     );
   }
 
@@ -128,7 +128,7 @@ function renderBetRow(entry) {
       ? Math.round(Number(entry.amount))
       : 0;
   const clickableAttrs = postUrl
-    ? ` data-im-action="open-bet-post" data-post-url="${escapeHtml(postUrl)}" title="Open source post on X" role="button" tabindex="0"`
+    ? ` data-im-action="open-bet-post" data-post-url="${escapeHtml(postUrl)}" title="Open source page" role="button" tabindex="0"`
     : '';
   const amountLabel =
     normalizedAmount > 0
@@ -716,7 +716,7 @@ function renderResearchPlaceholder(primaryMarket) {
     <div class="im-risk-panel">
       <div class="im-market-title">No research yet</div>
       <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        Click <strong>Research</strong> on a tweet that matches "${escapeHtml(primaryMarket.question)}" to store live parser evidence.
+        Click <strong>Research</strong> on a matching story to store live parser evidence for "${escapeHtml(primaryMarket.question)}".
       </div>
     </div>
   `;
@@ -728,7 +728,7 @@ function renderPortfolioResearchSection() {
       <div class="im-risk-panel">
         <div class="im-market-title">No research yet</div>
         <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-          Click <strong>Research</strong> on a tweet card to load AI thesis and evidence here.
+          Click <strong>Research</strong> on a matching story card to load AI thesis and evidence here.
         </div>
       </div>
     `;
@@ -741,7 +741,7 @@ function renderPortfolioResearchSection() {
       <div class="im-risk-panel">
         <div class="im-market-title">No research yet</div>
         <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-          Click <strong>Research</strong> on a tweet card to load AI thesis and evidence here.
+          Click <strong>Research</strong> on a matching story card to load AI thesis and evidence here.
         </div>
       </div>
     `;
@@ -796,7 +796,7 @@ function renderSavedTab() {
   if (!saved.length) {
     return renderEmptyPanel(
       'No saved markets yet',
-      'Use the Save button on tweet cards or market cards to track markets over time.'
+      'Use the Save button on matched story cards or market cards to track markets over time.'
     );
   }
 
@@ -805,7 +805,7 @@ function renderSavedTab() {
     const currentNo = Number.isFinite(item.currentNoOdds) ? item.currentNoOdds : item.savedNoOdds;
     const postUrl = sanitizePostUrl(item?.postUrl || '');
     const rowActionAttrs = postUrl
-      ? ` data-im-action="open-saved-post" data-post-url="${escapeHtml(postUrl)}" title="Open saved source post on X" role="button" tabindex="0"`
+      ? ` data-im-action="open-saved-post" data-post-url="${escapeHtml(postUrl)}" title="Open saved source page" role="button" tabindex="0"`
       : '';
 
     let deltaHtml = '<span style="font-size:12px;color:var(--pm-text-secondary);">Current odds unavailable.</span>';

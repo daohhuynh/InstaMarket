@@ -270,6 +270,7 @@ const AI_SEARCH_QUERY_LIMIT_PER_LOAD = 12;
 const AI_MARKET_MATCH_MEDIA_LIMIT_PER_LOAD = 24;
 const AI_SEARCH_QUERY_MEDIA_LIMIT_PER_LOAD = 20;
 const EXTENSION_JSON_FETCH_MESSAGE = "IM_FETCH_JSON";
+const EXTENSION_TEXT_FETCH_MESSAGE = "IM_FETCH_TEXT";
 const DEFAULT_FETCH_TIMEOUT_MS = 4500;
 const MIN_MARKETS_REQUIRED = 25;
 const STRONG_MATCH_MIN_SCORE = 12;
@@ -3060,7 +3061,28 @@ async function runResearchThesisForTweet({ tweetText, market, postUrl, postAutho
     post_timestamp: typeof postTimestamp === "string" ? postTimestamp : "",
   };
 
-  // Use fetch directly for SSE streaming (CORS is open on the research server).
+  try {
+    return await runResearchStreamDirect(endpoint, body, onProgress);
+  } catch (error) {
+    const viaWorker = await fetchTextViaExtensionWorker(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      timeoutMs: 120000,
+    });
+
+    if (!viaWorker) {
+      throw error;
+    }
+    if (!viaWorker.ok) {
+      throw new Error(viaWorker.error || `Research endpoint returned ${viaWorker.status || 0}`);
+    }
+
+    return parseResearchSsePayload(viaWorker.text || "", onProgress);
+  }
+}
+
+async function runResearchStreamDirect(endpoint, body, onProgress) {
   const fetchResponse = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -3085,20 +3107,74 @@ async function runResearchThesisForTweet({ tweetText, market, postUrl, postAutho
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      let parsed;
-      try {
-        parsed = JSON.parse(line.slice(6));
-      } catch {
-        continue;
-      }
+      const parsed = parseResearchSseLine(line);
+      if (!parsed) continue;
       if (parsed.type === "result") return parsed;
       if (parsed.type === "error") throw new Error(parsed.error || "Research error");
       if (typeof onProgress === "function") onProgress(parsed);
     }
   }
 
+  if (buffer.trim()) {
+    const parsed = parseResearchSseLine(buffer.trim());
+    if (parsed?.type === "result") return parsed;
+    if (parsed?.type === "error") throw new Error(parsed.error || "Research error");
+  }
+
   throw new Error("Research stream ended without a result");
+}
+
+function parseResearchSsePayload(payload, onProgress) {
+  const lines = String(payload || "").split("\n");
+  for (const line of lines) {
+    const parsed = parseResearchSseLine(line);
+    if (!parsed) continue;
+    if (parsed.type === "result") return parsed;
+    if (parsed.type === "error") throw new Error(parsed.error || "Research error");
+    if (typeof onProgress === "function") onProgress(parsed);
+  }
+  throw new Error("Research stream ended without a result");
+}
+
+function parseResearchSseLine(line) {
+  if (typeof line !== "string" || !line.startsWith("data: ")) return null;
+  try {
+    return JSON.parse(line.slice(6));
+  } catch {
+    return null;
+  }
+}
+
+async function fetchTextViaExtensionWorker(url, options = {}) {
+  if (!canUseExtensionMessageBridge()) {
+    return null;
+  }
+
+  const request = {
+    url,
+    method: String(options.method || "GET").toUpperCase(),
+    headers: options.headers || {},
+    body: typeof options.body === "string" ? options.body : "",
+    timeoutMs: Number(options.timeoutMs) || DEFAULT_FETCH_TIMEOUT_MS
+  };
+
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage(
+        { type: EXTENSION_TEXT_FETCH_MESSAGE, request },
+        response => {
+          const lastError = chrome.runtime?.lastError;
+          if (lastError || !response || response.type !== EXTENSION_TEXT_FETCH_MESSAGE) {
+            resolve(null);
+            return;
+          }
+          resolve(response);
+        }
+      );
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 if (typeof window !== "undefined") {

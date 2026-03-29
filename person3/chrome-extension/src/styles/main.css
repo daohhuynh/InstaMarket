@@ -2348,3 +2348,238 @@
   font-size: 11px;
   color: var(--im2-fg-muted);
 }
+
+/* ============================================
+   WASHINGTON POST ARTICLE EXPERIENCE
+   ============================================ */
+
+html[data-im-site="wapo"] {
+  --im-wapo-bg: #101010;
+  --im-wapo-panel: #161616;
+  --im-wapo-panel-2: #1f1f1f;
+  --im-wapo-border: rgba(244, 235, 219, 0.14);
+  --im-wapo-text: #f4ebdb;
+  --im-wapo-muted: #c6bba8;
+  --im-wapo-accent: #ead7b7;
+  --im-wapo-line: rgba(244, 235, 219, 0.2);
+  --im-wapo-red: #d54b3d;
+  --im-wapo-green: #38a169;
+}
+
+@media (min-width: 1200px) {
+  html[data-im-site="wapo"] body {
+    padding-right: 396px !important;
+    transition: padding-right 0.3s ease;
+  }
+
+  html[data-im-site="wapo"] body.im-sidebar-hidden {
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 1199px) {
+  html[data-im-site="wapo"] #im-sidebar,
+  html[data-im-site="wapo"] #im-sidebar-toggle {
+    display: none !important;
+  }
+}
+
+html[data-im-site="wapo"] #im-sidebar {
+  display: flex !important;
+  visibility: visible !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 26%),
+    var(--im-wapo-bg);
+  border-left: 1px solid var(--im-wapo-border);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.34);
+  z-index: 2147483000;
+}
+
+html[data-im-site="wapo"] #im-sidebar-toggle {
+  background: var(--im-wapo-panel);
+  border-color: var(--im-wapo-border);
+  color: var(--im-wapo-muted);
+  z-index: 2147483001;
+}
+
+html[data-im-site="wapo"] #im-sidebar-toggle:hover {
+  background: var(--im-wapo-panel-2);
+  color: var(--im-wapo-text);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-tab-bar {
+  border-bottom: 1px solid var(--im-wapo-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-tab {
+  color: var(--im-wapo-muted);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-tab.active {
+  color: var(--im-wapo-text);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-tab.active::after {
+  background: var(--im-wapo-accent);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-tab-content {
+  background: transparent;
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-market-card,
+html[data-im-site="wapo"] #im-sidebar .im-risk-panel,
+html[data-im-site="wapo"] #im-sidebar .im-saved-row,
+html[data-im-site="wapo"] #im-sidebar .im-position-row,
+html[data-im-site="wapo"] #im-sidebar .im2-report-panel,
+html[data-im-site="wapo"] #im-sidebar .im-empty-panel,
+html[data-im-site="wapo"] #im-sidebar .im-stat-box {
+  background: var(--im-wapo-panel);
+  border-color: var(--im-wapo-border);
+  color: var(--im-wapo-text);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-market-title,
+html[data-im-site="wapo"] #im-sidebar .im-position-title,
+html[data-im-site="wapo"] #im-sidebar .im2-report-title {
+  color: var(--im-wapo-text);
+  font-family: Georgia, "Times New Roman", Times, serif;
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-market-meta,
+html[data-im-site="wapo"] #im-sidebar .im-position-meta,
+html[data-im-site="wapo"] #im-sidebar .im-stat-label,
+html[data-im-site="wapo"] #im-sidebar .im-empty-sub,
+html[data-im-site="wapo"] #im-sidebar .im2-section-label,
+html[data-im-site="wapo"] #im-sidebar .im2-evidence-label,
+html[data-im-site="wapo"] #im-sidebar .im2-conviction-label,
+html[data-im-site="wapo"] #im-sidebar .im2-explanation,
+html[data-im-site="wapo"] #im-sidebar .im2-briefing-text,
+html[data-im-site="wapo"] #im-sidebar .im2-sources-count {
+  color: var(--im-wapo-muted);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-section-header,
+html[data-im-site="wapo"] #im-sidebar .im-best-match-badge,
+html[data-im-site="wapo"] #im-sidebar .im2-report-label,
+html[data-im-site="wapo"] #im-sidebar .im2-report-id {
+  color: var(--im-wapo-accent);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-export-btn,
+html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn,
+html[data-im-site="wapo"] #im-sidebar .im2-poly-link {
+  border-color: var(--im-wapo-border);
+  color: var(--im-wapo-text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html[data-im-site="wapo"] #im-sidebar .im-export-btn:hover,
+html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#im-wapo-inline-card {
+  margin: 28px 0 24px;
+  border-top: 1px solid var(--im-wapo-line, rgba(0, 0, 0, 0.14));
+  border-bottom: 1px solid var(--im-wapo-line, rgba(0, 0, 0, 0.14));
+  padding: 18px 0 22px;
+  color: var(--im-wapo-text, #101010);
+  font-family: var(--pm-font);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.im-wapo-inline-kicker {
+  margin-bottom: 12px;
+  color: #9b6b3d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.im-wapo-inline-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 35%),
+    #111111;
+  border: 1px solid rgba(244, 235, 219, 0.12);
+  color: #f4ebdb;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.im-wapo-inline-meta,
+.im-wapo-inline-actions,
+.im-wapo-inline-odds {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.im-wapo-inline-meta {
+  justify-content: space-between;
+}
+
+.im-wapo-inline-label {
+  color: #c6bba8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.im-wapo-inline-title {
+  color: #f4ebdb;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: clamp(22px, 2.1vw, 30px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.im-wapo-market-shell .im-market-question {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: inherit;
+  line-height: 1.08;
+  font-weight: 600;
+}
+
+.im-wapo-market-shell .im-probability-panel {
+  gap: 14px;
+}
+
+.im-wapo-market-shell .im-probability-bar {
+  height: 12px;
+}
+
+.im-wapo-market-shell .im-side-choice-pct {
+  font-size: 28px;
+}
+
+.im-wapo-market-shell .im-save-btn,
+.im-wapo-market-shell .im-pm-link,
+.im-wapo-market-shell .im-trade-choice,
+.im-wapo-market-shell .im-amount-pill,
+.im-wapo-market-shell .im-research-btn {
+  border-radius: 0;
+}
+
+@media (max-width: 900px) {
+  #im-wapo-inline-card {
+    margin: 20px 0;
+    padding: 16px 0 18px;
+  }
+
+  .im-wapo-inline-shell {
+    padding: 16px;
+  }
+}
