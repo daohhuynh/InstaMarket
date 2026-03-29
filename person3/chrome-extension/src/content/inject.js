@@ -258,9 +258,22 @@
       return;
     }
     try {
-      const result = await loadPolymarketMarketUniverse({ limit: 2200, pageSize: 500, maxPages: 6 });
+      const result = await loadPolymarketMarketUniverse({ limit: 4500, pageSize: 500, maxPages: 10 });
       if (result?.count) {
         console.info(`[InstaMarket] Loaded ${result.count} live Polymarket markets.`);
+      }
+
+      // Expand to a much larger universe in the background for better long-tail matching.
+      if (typeof warmExpandedMarketUniverse === 'function') {
+        warmExpandedMarketUniverse({ limit: 9000, maxPages: 20 })
+          .then(expanded => {
+            if (expanded?.count) {
+              console.info(`[InstaMarket] Expanded market universe to ${expanded.count} markets.`);
+            }
+          })
+          .catch(() => {
+            // Ignore expansion errors; base universe is already loaded.
+          });
       }
     } catch (error) {
       console.warn('[InstaMarket] Unable to load live Polymarket markets:', error);

@@ -20,6 +20,30 @@ const MATCH_STOP_WORDS = new Set([
   "email", "gmail", "http", "https", "www", "com"
 ]);
 
+const TOKEN_CANONICAL_MAP = new Map([
+  ["gpt-5", "gpt5"],
+  ["gpt5", "gpt5"],
+  ["chatgpt", "openai"],
+  ["claude", "anthropic"],
+  ["anthropic", "anthropic"],
+  ["btc", "bitcoin"],
+  ["bitcoin", "bitcoin"],
+  ["eth", "ethereum"],
+  ["ethereum", "ethereum"],
+  ["fomc", "federalreserve"],
+  ["fed", "federalreserve"],
+  ["federal", "federalreserve"],
+  ["reserve", "federalreserve"],
+  ["tiktok", "tiktok"],
+  ["bytedance", "tiktok"],
+  ["xai", "xai"],
+  ["openai", "openai"],
+  ["tesla", "tesla"],
+  ["musk", "musk"],
+  ["elon", "musk"],
+  ["trump", "trump"],
+]);
+
 const POLYMARKET_MARKETS_ENDPOINT = "https://gamma-api.polymarket.com/markets";
 const AI_MARKET_MATCH_ENDPOINT_DEFAULT = "http://localhost:8787/v1/match-market";
 const AI_MARKET_MATCH_LIMIT_PER_LOAD = 5;
@@ -30,8 +54,8 @@ const STRONG_MATCH_MIN_SCORE = 12;
 const WEAK_MATCH_MIN_SCORE = 9.5;
 const RARE_TOKEN_DF_RATIO = 0.035;
 const VERY_RARE_TOKEN_DF_RATIO = 0.015;
-const MAX_EXPANDED_MARKET_LIMIT = 5000;
-const MAX_EXPANDED_MARKET_PAGES = 12;
+const MAX_EXPANDED_MARKET_LIMIT = 9000;
+const MAX_EXPANDED_MARKET_PAGES = 20;
 
 let MARKET_UNIVERSE = [];
 let MARKET_MATCH_INDEX = [];
@@ -43,7 +67,7 @@ rebuildMarketMatchIndex();
 
 function findBestMarketForTweet(tweetText) {
   const ranked = rankMarketCandidates(tweetText, 30);
-  return selectParserMatchFromRanked(ranked);
+  return selectParserMatchFromRanked(ranked, tweetText);
 }
 
 async function findBestMarketForTweetWithAi(tweetText) {
@@ -547,9 +571,9 @@ function getMarketById(marketId) {
 }
 
 async function loadPolymarketMarketUniverse(options = {}) {
-  const targetLimit = clampNumber(Number(options.limit) || 1800, 200, 3500);
+  const targetLimit = clampNumber(Number(options.limit) || 1800, 200, 12000);
   const pageSize = clampNumber(Number(options.pageSize) || 500, 200, 500);
-  const maxPages = clampNumber(Number(options.maxPages) || 6, 1, 8);
+  const maxPages = clampNumber(Number(options.maxPages) || 6, 1, 24);
 
   const aggregated = [];
   for (let page = 0; page < maxPages && aggregated.length < targetLimit; page += 1) {
@@ -590,6 +614,20 @@ async function loadPolymarketMarketUniverse(options = {}) {
   return { source: "polymarket", count: mapped.length };
 }
 
+async function warmExpandedMarketUniverse(options = {}) {
+  const limit = clampNumber(Number(options.limit) || 9000, 200, 12000);
+  const maxPages = clampNumber(Number(options.maxPages) || 20, 1, 24);
+  try {
+    return await loadPolymarketMarketUniverse({
+      limit,
+      pageSize: 500,
+      maxPages
+    });
+  } catch {
+    return null;
+  }
+}
+
 function shouldAttemptExpandedMarketLoad() {
   return !EXTENDED_MARKET_UNIVERSE_DONE && !EXTENDED_MARKET_UNIVERSE_PROMISE;
 }
@@ -605,9 +643,8 @@ async function ensureExpandedMarketUniverseLoaded() {
 
   EXTENDED_MARKET_UNIVERSE_PROMISE = (async () => {
     try {
-      await loadPolymarketMarketUniverse({
+      await warmExpandedMarketUniverse({
         limit: MAX_EXPANDED_MARKET_LIMIT,
-        pageSize: 500,
         maxPages: MAX_EXPANDED_MARKET_PAGES
       });
     } catch {
@@ -767,19 +804,20 @@ function tokenizeForMatch(text) {
 }
 
 function stemToken(token) {
+  let result = token;
   if (token.endsWith("ies") && token.length > 4) {
-    return token.slice(0, -3) + "y";
+    result = token.slice(0, -3) + "y";
   }
-  if (token.endsWith("ing") && token.length > 5) {
-    return token.slice(0, -3);
+  if (result.endsWith("ing") && result.length > 5) {
+    result = result.slice(0, -3);
   }
-  if (token.endsWith("ed") && token.length > 4) {
-    return token.slice(0, -2);
+  if (result.endsWith("ed") && result.length > 4) {
+    result = result.slice(0, -2);
   }
-  if (token.endsWith("s") && token.length > 3) {
-    return token.slice(0, -1);
+  if (result.endsWith("s") && result.length > 3) {
+    result = result.slice(0, -1);
   }
-  return token;
+  return TOKEN_CANONICAL_MAP.get(result) || result;
 }
 
 function isPureNumberToken(token) {
@@ -792,6 +830,7 @@ function clampNumber(value, min, max) {
 
 if (typeof window !== "undefined") {
   window.loadPolymarketMarketUniverse = loadPolymarketMarketUniverse;
+  window.warmExpandedMarketUniverse = warmExpandedMarketUniverse;
   window.getMarketUniverse = getMarketUniverse;
   window.getMarketById = getMarketById;
 }
