@@ -43,7 +43,12 @@
     const btn = document.createElement('button');
     btn.id = 'im-sidebar-toggle';
     btn.title = 'Collapse / expand InstaMarket sidebar';
-    btn.innerHTML = 'â¯';
+    btn.setAttribute('aria-label', 'Collapse InstaMarket sidebar');
+    btn.innerHTML = `
+      <svg class="im-sidebar-toggle-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path d="M6 3L10 8L6 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    `;
     btn.addEventListener('click', toggleSidebar);
     document.body.appendChild(btn);
   }
@@ -54,7 +59,10 @@
     const main = document.querySelector('main[role="main"]');
     const collapsed = sidebar.classList.toggle('im-collapsed');
     toggle.classList.toggle('im-collapsed', collapsed);
-    toggle.innerHTML = collapsed ? 'â®' : 'â¯';
+    toggle.setAttribute(
+      'aria-label',
+      collapsed ? 'Expand InstaMarket sidebar' : 'Collapse InstaMarket sidebar'
+    );
     if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
     // Show Ditto only when sidebar is collapsed
     updateDittoVisibility();
@@ -250,6 +258,7 @@
     tweet.setAttribute('data-im-injected', 'true');
 
     const tweetText = tweet.innerText;
+    const tweetContext = extractTweetContext(tweet);
     const match = await findBestMarketForTweetWithAi(tweetText);
     if (!match) return;
     const market = match.market;
@@ -336,7 +345,7 @@
         const amount = getSelectedTradeAmount(layer);
         showToast(`Bet placed: $${formatTradeAmount(amount)} ${side} on "${market.question.slice(0, 40)}..."`);
         if (typeof window.recordSidebarBet === 'function') {
-          window.recordSidebarBet(mId, side, amount);
+          window.recordSidebarBet(mId, side, amount, { postUrl: tweetContext?.postUrl || '' });
         }
         persistResearch(mId, researchSummary);
         switchSidebarToMarkets(mId);
@@ -346,8 +355,11 @@
     layer.querySelector('.im-save-btn').addEventListener('click', e => {
       e.stopPropagation();
       if (typeof window.saveMarketForLater === 'function') {
-        const saved = window.saveMarketForLater(market.id);
+        const saved = window.saveMarketForLater(market.id, { postUrl: tweetContext?.postUrl || '' });
         showToast(saved ? `Saved: "${market.question.slice(0, 40)}..."` : 'Already saved.');
+        if (typeof window.switchSidebarToSaved === 'function') {
+          window.switchSidebarToSaved();
+        }
         return;
       }
       showToast(`Saved: "${market.question.slice(0, 40)}..."`);

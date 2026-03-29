@@ -28,16 +28,11 @@ function createSidebar() {
   sidebar.innerHTML = `
     <div class="im-tab-bar">
       <button class="im-tab active" data-tab="portfolio"><span>Portfolio</span></button>
-      <button class="im-tab" data-tab="markets"><span>Markets</span></button>
       <button class="im-tab" data-tab="saved"><span>Saved</span></button>
     </div>
 
     <div class="im-tab-content active" id="im-tab-portfolio">
       ${renderPortfolioTab()}
-    </div>
-
-    <div class="im-tab-content" id="im-tab-markets">
-      ${renderMarketsTab(IM_ACTIVE_MARKET_ID)}
     </div>
 
     <div class="im-tab-content" id="im-tab-saved">
@@ -90,12 +85,20 @@ function renderPortfolioTab() {
 
 function renderBetRow(entry) {
   const positiveSide = entry.side === 'YES';
-  const amountLabel =
+  const postUrl = sanitizePostUrl(entry?.postUrl || '');
+  const normalizedAmount =
     Number.isFinite(Number(entry.amount)) && Number(entry.amount) > 0
-      ? `$${Number(entry.amount).toLocaleString('en-US')}`
+      ? Math.round(Number(entry.amount))
+      : 0;
+  const clickableAttrs = postUrl
+    ? ` data-im-action="open-bet-post" data-post-url="${escapeHtml(postUrl)}" title="Open source post on X" role="button" tabindex="0"`
+    : '';
+  const amountLabel =
+    normalizedAmount > 0
+      ? `$${normalizedAmount.toLocaleString('en-US')}`
       : '';
   return `
-    <div class="im-position-row">
+    <div class="im-position-row ${postUrl ? 'im-position-row-link' : ''}"${clickableAttrs}>
       <div class="im-position-info">
         <div class="im-position-title">${escapeHtml(entry.question || 'Unknown market')}</div>
         <div class="im-position-meta">
@@ -104,7 +107,13 @@ function renderBetRow(entry) {
           &nbsp;·&nbsp;${formatTimestamp(entry.placedAt)}
         </div>
       </div>
-      <div class="im-position-pnl ${positiveSide ? 'pos' : 'neg'}">${positiveSide ? 'YES' : 'NO'}</div>
+      <div
+        class="im-position-pnl ${positiveSide ? 'pos' : 'neg'}"
+        data-im-action="show-bet-amount"
+        data-side="${escapeHtml(positiveSide ? 'YES' : 'NO')}"
+        data-amount="${escapeHtml(String(normalizedAmount))}"
+        title="Show bet amount"
+      >${positiveSide ? 'YES' : 'NO'}</div>
     </div>
   `;
 }
@@ -632,6 +641,10 @@ function renderSavedTab() {
   return saved.map(item => {
     const currentYes = Number.isFinite(item.currentYesOdds) ? item.currentYesOdds : item.savedYesOdds;
     const currentNo = Number.isFinite(item.currentNoOdds) ? item.currentNoOdds : item.savedNoOdds;
+    const postUrl = sanitizePostUrl(item?.postUrl || '');
+    const rowActionAttrs = postUrl
+      ? ` data-im-action="open-saved-post" data-post-url="${escapeHtml(postUrl)}" title="Open saved source post on X" role="button" tabindex="0"`
+      : '';
 
     let deltaHtml = '<span style="font-size:12px;color:var(--pm-text-secondary);">Current odds unavailable.</span>';
     if (Number.isFinite(item.currentYesOdds)) {
@@ -646,7 +659,7 @@ function renderSavedTab() {
     }
 
     return `
-      <div class="im-saved-row">
+      <div class="im-saved-row ${postUrl ? 'im-saved-row-link' : ''}"${rowActionAttrs}>
         <div class="im-market-title">${escapeHtml(item.question)}</div>
         <div class="im-market-meta">
           <span>Saved ${formatTimestamp(item.savedAt)}</span>
@@ -691,6 +704,38 @@ function bindSidebarEvents() {
       return;
     }
 
+    if (action === 'open-bet-post') {
+      const postUrl = sanitizePostUrl(target.getAttribute('data-post-url') || '');
+      if (postUrl) {
+        window.open(postUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast('No post URL saved for this bet.');
+      }
+      return;
+    }
+
+    if (action === 'open-saved-post') {
+      const postUrl = sanitizePostUrl(target.getAttribute('data-post-url') || '');
+      if (postUrl) {
+        window.open(postUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast('No post URL saved for this market.');
+      }
+      return;
+    }
+
+    if (action === 'show-bet-amount') {
+      const sideLabel = target.getAttribute('data-side') === 'NO' ? 'NO' : 'YES';
+      const amountRaw = Number(target.getAttribute('data-amount'));
+      const hasAmount = Number.isFinite(amountRaw) && amountRaw > 0;
+      showToast(
+        hasAmount
+          ? `${sideLabel} bet: $${Math.round(amountRaw).toLocaleString('en-US')}`
+          : `${sideLabel} bet amount unavailable`
+      );
+      return;
+    }
+
     if (action === 'bet' && marketId && side) {
       const recorded = recordSidebarBet(marketId, side);
       if (recorded) {
@@ -708,7 +753,8 @@ function bindSidebarEvents() {
       try {
         await loadPolymarketMarketUniverse({ limit: 2200, pageSize: 500, maxPages: 6 });
         showToast('Live markets refreshed.');
-        rerenderMarketsTab();
+        rerenderPortfolioTabIfVisible();
+        rerenderSavedTabIfVisible();
       } catch {
         showToast('Refresh failed.');
       }
@@ -724,7 +770,7 @@ function bindSidebarEvents() {
         ...existing,
         showFullData: !existing.showFullData
       });
-      rerenderMarketsTab();
+      rerenderPortfolioTabIfVisible();
       return;
     }
 
@@ -782,6 +828,15 @@ function bindSidebarEvents() {
     }
   });
 
+  sidebar.addEventListener('keydown', event => {
+    const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"]');
+    if (!target) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      target.click();
+    }
+  });
+
   document.querySelectorAll('.im-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const tabName = tab.dataset.tab;
@@ -796,8 +851,6 @@ function bindSidebarEvents() {
 
       if (tabName === 'portfolio') {
         content.innerHTML = renderPortfolioTab();
-      } else if (tabName === 'markets') {
-        content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
       } else if (tabName === 'saved') {
         content.innerHTML = renderSavedTab();
       }
@@ -805,12 +858,6 @@ function bindSidebarEvents() {
       content.classList.add('active');
     });
   });
-}
-
-function rerenderMarketsTab() {
-  const content = document.getElementById('im-tab-markets');
-  if (!content) return;
-  content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
 }
 
 function rerenderSavedTabIfVisible() {
@@ -825,14 +872,28 @@ function rerenderPortfolioTabIfVisible() {
   content.innerHTML = renderPortfolioTab();
 }
 
-function saveMarketForLater(marketId) {
+function saveMarketForLater(marketId, meta = {}) {
   if (!marketId) return false;
   const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
   if (!market) return false;
+  const normalizedPostUrl = sanitizePostUrl(meta?.postUrl || '');
 
   const saved = loadJsonLocalStorage(IM_SAVED_MARKETS_KEY, []);
-  const exists = saved.some(entry => String(entry.marketId) === String(market.id));
-  if (exists) return false;
+  const existingIndex = saved.findIndex(entry => String(entry.marketId) === String(market.id));
+  if (existingIndex >= 0) {
+    const existingPostUrl = sanitizePostUrl(saved[existingIndex]?.postUrl || '');
+    // Allow re-saving to backfill a missing source post URL.
+    if (normalizedPostUrl && !existingPostUrl) {
+      saved[existingIndex] = {
+        ...saved[existingIndex],
+        postUrl: normalizedPostUrl
+      };
+      storeJsonLocalStorage(IM_SAVED_MARKETS_KEY, saved);
+      rerenderSavedTabIfVisible();
+      return true;
+    }
+    return false;
+  }
 
   saved.push({
     marketId: String(market.id),
@@ -840,7 +901,8 @@ function saveMarketForLater(marketId) {
     savedAt: new Date().toISOString(),
     savedYesOdds: Number(market.yesOdds) || 0,
     savedNoOdds: Number(market.noOdds) || 0,
-    savedVolume: market.volume || '$0 Vol'
+    savedVolume: market.volume || '$0 Vol',
+    postUrl: normalizedPostUrl
   });
 
   while (saved.length > IM_MAX_SAVED_MARKETS) {
@@ -848,6 +910,7 @@ function saveMarketForLater(marketId) {
   }
 
   storeJsonLocalStorage(IM_SAVED_MARKETS_KEY, saved);
+  rerenderSavedTabIfVisible();
   return true;
 }
 
@@ -864,6 +927,7 @@ function getSavedMarketsDetailed() {
         savedYesOdds: Number(entry.savedYesOdds) || 0,
         savedNoOdds: Number(entry.savedNoOdds) || 0,
         savedVolume: entry.savedVolume || '$0 Vol',
+        postUrl: sanitizePostUrl(entry.postUrl || ''),
         currentYesOdds: live ? Number(live.yesOdds) : NaN,
         currentNoOdds: live ? Number(live.noOdds) : NaN,
         currentVolume: live?.volume || ''
@@ -872,12 +936,13 @@ function getSavedMarketsDetailed() {
     .reverse();
 }
 
-function recordSidebarBet(marketId, side, amount) {
+function recordSidebarBet(marketId, side, amount, meta = {}) {
   if (!marketId || (side !== 'YES' && side !== 'NO')) return false;
 
   const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
   if (!market) return false;
   const normalizedAmount = Math.max(1, Math.round(Number(amount) || 0));
+  const normalizedPostUrl = sanitizePostUrl(meta?.postUrl || "");
 
   const betLog = loadJsonLocalStorage(IM_BET_LOG_KEY, []);
   betLog.push({
@@ -887,7 +952,8 @@ function recordSidebarBet(marketId, side, amount) {
     amount: normalizedAmount,
     yesOdds: Number(market.yesOdds) || 0,
     noOdds: Number(market.noOdds) || 0,
-    placedAt: new Date().toISOString()
+    placedAt: new Date().toISOString(),
+    postUrl: normalizedPostUrl
   });
 
   while (betLog.length > IM_MAX_BET_LOG) {
@@ -944,6 +1010,13 @@ function formatTimestamp(value) {
   if (diffMs < day) return `${Math.max(1, Math.round(diffMs / hour))}h ago`;
 
   return `${Math.max(1, Math.round(diffMs / day))}d ago`;
+}
+
+function sanitizePostUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) return '';
+  return url;
 }
 
 function escapeHtml(value) {
@@ -1127,20 +1200,45 @@ function switchSidebarToMarkets(marketId) {
   document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
   document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
 
-  const marketsTab = document.querySelector('.im-tab[data-tab="markets"]');
-  const marketsContent = document.getElementById('im-tab-markets');
+  // Markets tab has been removed; route to Portfolio to keep existing
+  // tweet-card navigation actions stable.
+  const portfolioTab = document.querySelector('.im-tab[data-tab="portfolio"]');
+  const portfolioContent = document.getElementById('im-tab-portfolio');
 
-  if (marketsTab) {
-    marketsTab.classList.add('active');
+  if (portfolioTab) {
+    portfolioTab.classList.add('active');
   }
 
-  if (marketsContent) {
-    marketsContent.classList.add('active');
-    marketsContent.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
+  if (portfolioContent) {
+    portfolioContent.classList.add('active');
+    portfolioContent.innerHTML = renderPortfolioTab();
+  }
+}
+
+function switchSidebarToSaved() {
+  const sidebar = document.getElementById('im-sidebar');
+  if (!sidebar) {
+    createSidebar();
+  }
+
+  document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
+  document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
+
+  const savedTab = document.querySelector('.im-tab[data-tab="saved"]');
+  const savedContent = document.getElementById('im-tab-saved');
+
+  if (savedTab) {
+    savedTab.classList.add('active');
+  }
+
+  if (savedContent) {
+    savedContent.classList.add('active');
+    savedContent.innerHTML = renderSavedTab();
   }
 }
 
 window.setMarketResearch = setMarketResearch;
 window.switchSidebarToMarkets = switchSidebarToMarkets;
+window.switchSidebarToSaved = switchSidebarToSaved;
 window.saveMarketForLater = saveMarketForLater;
 window.recordSidebarBet = recordSidebarBet;
