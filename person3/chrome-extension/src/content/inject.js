@@ -93,43 +93,46 @@
       const modal = document.getElementById("im-ditto-modal");
       if (!btn) return false;
 
-      // 1. Match X's button size exactly
-      const btnSize = grokRect.width;
-      const rightFromViewport = window.innerWidth - grokRect.right;
+      const btnSize = grokRect.width; // Usually 56px
 
-      // 2. Calculate the native gap between Grok and Chat
-      let gap = 16; // default fallback
+      // Calculate the exact gap Twitter uses between its buttons
+      let gap = 16;
       if (chatRect && grokRect.bottom < chatRect.top) {
         gap = chatRect.top - grokRect.bottom;
       }
 
-      // 3. Stack Ditto perfectly above Grok
-      // CSS 'bottom' is distance from bottom of screen.
-      // Distance to Grok's top is: window.innerHeight - grokRect.top. Add the gap.
-      const dittoBottom = window.innerHeight - grokRect.top + gap;
-
-      // 4. Steal X's native computed styles so it blends perfectly
-      const computedStyle = window.getComputedStyle(grokEl);
+      // Use LEFT and TOP for absolute precision (ignores scrollbar weirdness)
+      const dittoLeft = grokRect.left;
+      const dittoTop = grokRect.top - btnSize - gap;
 
       btn.style.position = "fixed";
-      btn.style.right = rightFromViewport + "px";
-      btn.style.bottom = dittoBottom + "px";
+      btn.style.left = dittoLeft + "px";
+      btn.style.top = dittoTop + "px";
       btn.style.width = btnSize + "px";
       btn.style.height = btnSize + "px";
-      btn.style.borderRadius = computedStyle.borderRadius;
-      btn.style.backgroundColor = computedStyle.backgroundColor;
-      btn.style.border = computedStyle.border;
-      btn.style.boxShadow = computedStyle.boxShadow;
+
+      // Remove the box completely
+      btn.style.backgroundColor = "transparent";
+      btn.style.border = "none";
+      btn.style.boxShadow = "none";
+      btn.style.outline = "none";
       btn.style.cursor = "pointer";
       btn.style.display = "flex";
       btn.style.alignItems = "center";
       btn.style.justifyContent = "center";
       btn.style.padding = "0";
       btn.style.margin = "0";
+      btn.style.zIndex = "9999";
+
+      // Add a native-feeling hover effect to the Pokemon
+      btn.style.transition = "transform 0.15s ease-in-out";
+      btn.onmouseover = () => (btn.style.transform = "scale(1.15)");
+      btn.onmouseout = () => (btn.style.transform = "scale(1)");
 
       if (modal) {
-        modal.style.right = rightFromViewport + "px";
-        modal.style.bottom = dittoBottom + btnSize + 8 + "px";
+        // Anchor the modal right next to Ditto
+        modal.style.right = window.innerWidth - dittoLeft + 16 + "px";
+        modal.style.bottom = window.innerHeight - dittoTop - btnSize + "px";
       }
       return true;
     }
@@ -151,10 +154,11 @@
     const btn = document.createElement("button");
     btn.id = "im-ditto-btn";
     btn.title = "Ditto — Find your trading tribe";
-    // icon inner div mirrors Twitter's exact structure: absolute inset-0, size-9 (36px)
+
+    // Scale the sprite up to fill the invisible button area
     btn.innerHTML = `
-          <div style="position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-            <img src="${DITTO_IMG}" alt="Ditto" style="width:28px;height:28px;image-rendering:pixelated;">
+          <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+            <img src="${DITTO_IMG}" alt="Ditto" style="width:50px;height:50px;image-rendering:pixelated;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
           </div>`;
     btn.addEventListener("click", toggleDittoModal);
     document.body.appendChild(btn);
