@@ -7,8 +7,12 @@ const IM_SAVED_MARKETS_KEY = 'instamarket_saved_markets_v1';
 const IM_BET_LOG_KEY = 'instamarket_bet_log_v1';
 const IM_MAX_SAVED_MARKETS = 200;
 const IM_MAX_BET_LOG = 250;
+const IM_PERSISTENT_KEYS = [IM_SAVED_MARKETS_KEY, IM_BET_LOG_KEY];
 
 let IM_ACTIVE_MARKET_ID = null;
+let IM_STORAGE_SYNC_INITIALIZED = false;
+let IM_STORAGE_CHANGE_LISTENER_BOUND = false;
+const IM_STORAGE_MEMORY = Object.create(null);
 
 function setMarketResearch(marketId, research) {
   if (!marketId || !research) return;
@@ -22,6 +26,7 @@ function getMarketResearch(marketId) {
 function createSidebar() {
   const existing = document.getElementById('im-sidebar');
   if (existing) return;
+  initPersistentStateSync();
 
   const sidebar = document.createElement('div');
   sidebar.id = 'im-sidebar';
@@ -706,20 +711,26 @@ function bindSidebarEvents() {
 
     if (action === 'open-bet-post') {
       const postUrl = sanitizePostUrl(target.getAttribute('data-post-url') || '');
-      if (postUrl) {
-        window.open(postUrl, '_blank', 'noopener,noreferrer');
-      } else {
+      if (!postUrl) {
         showToast('No post URL saved for this bet.');
+        return;
+      }
+      const opened = openUrlInNewTab(postUrl);
+      if (!opened) {
+        showToast('Could not open post in a new tab.');
       }
       return;
     }
 
     if (action === 'open-saved-post') {
       const postUrl = sanitizePostUrl(target.getAttribute('data-post-url') || '');
-      if (postUrl) {
-        window.open(postUrl, '_blank', 'noopener,noreferrer');
-      } else {
+      if (!postUrl) {
         showToast('No post URL saved for this market.');
+        return;
+      }
+      const opened = openUrlInNewTab(postUrl);
+      if (!opened) {
+        showToast('Could not open post in a new tab.');
       }
       return;
     }
@@ -969,21 +980,214 @@ function getBetLog() {
 }
 
 function loadJsonLocalStorage(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
+  const fallbackArray = Array.isArray(fallback) ? fallback : [];
+  const fromMemory = IM_STORAGE_MEMORY[key];
+  if (Array.isArray(fromMemory)) {
+    return cloneJson(fromMemory);
   }
+  return loadJsonFromLocalOnly(key, fallbackArray);
 }
 
 function storeJsonLocalStorage(key, value) {
+  const normalized = Array.isArray(value) ? cloneJson(value) : [];
+  IM_STORAGE_MEMORY[key] = normalized;
+  writeJsonToLocalOnly(key, normalized);
+
+  if (!isChromeStorageAvailable()) {
+    return;
+  }
+
+  try {
+    chrome.storage.local.set({ [key]: normalized });
+  } catch {
+    // Ignore extension storage write failures.
+  }
+}
+
+function initPersistentStateSync() {
+  if (IM_STORAGE_SYNC_INITIALIZED) return;
+  IM_STORAGE_SYNC_INITIALIZED = true;
+
+  for (const key of IM_PERSISTENT_KEYS) {
+    IM_STORAGE_MEMORY[key] = loadJsonFromLocalOnly(key, []);
+  }
+
+  if (!isChromeStorageAvailable()) {
+    return;
+  }
+
+  bindChromeStorageChangeListener();
+
+  try {
+    chrome.storage.local.get(IM_PERSISTENT_KEYS, result => {
+      const payload = {};
+      let changed = false;
+
+      for (const key of IM_PERSISTENT_KEYS) {
+        const localEntries = loadJsonFromLocalOnly(key, []);
+        const syncedEntries = Array.isArray(result?.[key]) ? result[key] : [];
+        const merged = mergePersistentArrays(key, localEntries, syncedEntries);
+        payload[key] = merged;
+        IM_STORAGE_MEMORY[key] = cloneJson(merged);
+
+        if (!isSameJson(localEntries, merged)) {
+          writeJsonToLocalOnly(key, merged);
+          changed = true;
+        }
+      }
+
+      try {
+        chrome.storage.local.set(payload);
+      } catch {
+        // Ignore extension storage write failures.
+      }
+
+      if (changed) {
+        rerenderPortfolioTabIfVisible();
+        rerenderSavedTabIfVisible();
+      }
+    });
+  } catch {
+    // Ignore extension storage read failures.
+  }
+}
+
+function bindChromeStorageChangeListener() {
+  if (IM_STORAGE_CHANGE_LISTENER_BOUND) return;
+  if (!isChromeStorageAvailable() || !chrome.storage?.onChanged?.addListener) return;
+  IM_STORAGE_CHANGE_LISTENER_BOUND = true;
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+
+    let changed = false;
+    for (const key of IM_PERSISTENT_KEYS) {
+      if (!changes[key]) continue;
+      const next = Array.isArray(changes[key].newValue) ? changes[key].newValue : [];
+      IM_STORAGE_MEMORY[key] = cloneJson(next);
+      writeJsonToLocalOnly(key, next);
+      changed = true;
+    }
+
+    if (changed) {
+      rerenderPortfolioTabIfVisible();
+      rerenderSavedTabIfVisible();
+    }
+  });
+}
+
+function mergePersistentArrays(key, localEntries, syncedEntries) {
+  if (key === IM_SAVED_MARKETS_KEY) {
+    return mergeSavedMarkets(localEntries, syncedEntries);
+  }
+  if (key === IM_BET_LOG_KEY) {
+    return mergeBetLogEntries(localEntries, syncedEntries);
+  }
+  const merged = [...(Array.isArray(localEntries) ? localEntries : []), ...(Array.isArray(syncedEntries) ? syncedEntries : [])];
+  return cloneJson(merged);
+}
+
+function mergeSavedMarkets(localEntries, syncedEntries) {
+  const byMarketId = new Map();
+  const combined = [...(Array.isArray(localEntries) ? localEntries : []), ...(Array.isArray(syncedEntries) ? syncedEntries : [])];
+
+  for (const raw of combined) {
+    if (!raw || typeof raw !== 'object') continue;
+    const marketId = String(raw.marketId || '').trim();
+    if (!marketId) continue;
+
+    const entry = { ...raw, marketId, postUrl: sanitizePostUrl(raw.postUrl || '') };
+    const existing = byMarketId.get(marketId);
+    if (!existing) {
+      byMarketId.set(marketId, entry);
+      continue;
+    }
+
+    const existingTs = Date.parse(existing.savedAt || '') || 0;
+    const entryTs = Date.parse(entry.savedAt || '') || 0;
+    const newest = entryTs >= existingTs ? entry : existing;
+    const oldest = newest === entry ? existing : entry;
+
+    byMarketId.set(marketId, {
+      ...oldest,
+      ...newest,
+      marketId,
+      postUrl: sanitizePostUrl(newest.postUrl || oldest.postUrl || '')
+    });
+  }
+
+  const merged = Array.from(byMarketId.values()).sort((a, b) => (Date.parse(a.savedAt || '') || 0) - (Date.parse(b.savedAt || '') || 0));
+  return merged.slice(-IM_MAX_SAVED_MARKETS);
+}
+
+function mergeBetLogEntries(localEntries, syncedEntries) {
+  const combined = [...(Array.isArray(localEntries) ? localEntries : []), ...(Array.isArray(syncedEntries) ? syncedEntries : [])];
+  const seen = new Set();
+  const merged = [];
+
+  for (const raw of combined) {
+    if (!raw || typeof raw !== 'object') continue;
+    const marketId = String(raw.marketId || '').trim();
+    const side = raw.side === 'NO' ? 'NO' : (raw.side === 'YES' ? 'YES' : '');
+    const placedAt = String(raw.placedAt || '').trim();
+    if (!marketId || !side || !placedAt) continue;
+
+    const amount = Number(raw.amount);
+    const normalizedAmount = Number.isFinite(amount) ? Math.max(1, Math.round(amount)) : 0;
+    const dedupeKey = `${marketId}|${side}|${placedAt}|${normalizedAmount}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    merged.push({
+      ...raw,
+      marketId,
+      side,
+      amount: normalizedAmount || raw.amount || 0,
+      postUrl: sanitizePostUrl(raw.postUrl || '')
+    });
+  }
+
+  merged.sort((a, b) => (Date.parse(a.placedAt || '') || 0) - (Date.parse(b.placedAt || '') || 0));
+  return merged.slice(-IM_MAX_BET_LOG);
+}
+
+function loadJsonFromLocalOnly(key, fallback) {
+  const fallbackArray = Array.isArray(fallback) ? fallback : [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return cloneJson(fallbackArray);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? cloneJson(parsed) : cloneJson(fallbackArray);
+  } catch {
+    return cloneJson(fallbackArray);
+  }
+}
+
+function writeJsonToLocalOnly(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Intentionally ignore local storage write failures.
+    // Ignore local storage write failures.
+  }
+}
+
+function isChromeStorageAvailable() {
+  return typeof chrome !== 'undefined' && !!chrome.storage?.local;
+}
+
+function cloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return Array.isArray(value) ? [...value] : value;
+  }
+}
+
+function isSameJson(left, right) {
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
   }
 }
 
@@ -1017,6 +1221,43 @@ function sanitizePostUrl(value) {
   if (!url) return '';
   if (!/^https?:\/\//i.test(url)) return '';
   return url;
+}
+
+function openUrlInNewTab(url) {
+  const sanitized = sanitizePostUrl(url);
+  if (!sanitized) return false;
+
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = sanitized;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return true;
+  } catch {
+    // Try fallbacks below.
+  }
+
+  try {
+    const popup = window.open(sanitized, '_blank', 'noopener,noreferrer');
+    if (popup) return true;
+  } catch {
+    // Try extension-background fallback below.
+  }
+
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'IM_OPEN_TAB', url: sanitized });
+      return true;
+    }
+  } catch {
+    // Ignore runtime messaging failures.
+  }
+
+  return false;
 }
 
 function escapeHtml(value) {

@@ -3,28 +3,53 @@
 // ============================================================
 
 const IM_FETCH_JSON_MESSAGE = "IM_FETCH_JSON";
+const IM_OPEN_TAB_MESSAGE = "IM_OPEN_TAB";
 const DEFAULT_TIMEOUT_MS = 12000;
 const MIN_TIMEOUT_MS = 1000;
 const MAX_TIMEOUT_MS = 30000;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || message.type !== IM_FETCH_JSON_MESSAGE) {
+  if (!message || typeof message !== "object") {
     return;
   }
 
-  handleJsonFetchMessage(message)
-    .then(sendResponse)
-    .catch(error => {
-      sendResponse({
-        type: IM_FETCH_JSON_MESSAGE,
-        ok: false,
-        status: 0,
-        json: null,
-        error: error instanceof Error ? error.message : "Unknown fetch error"
+  if (message.type === IM_FETCH_JSON_MESSAGE) {
+    handleJsonFetchMessage(message)
+      .then(sendResponse)
+      .catch(error => {
+        sendResponse({
+          type: IM_FETCH_JSON_MESSAGE,
+          ok: false,
+          status: 0,
+          json: null,
+          error: error instanceof Error ? error.message : "Unknown fetch error"
+        });
       });
+
+    return true;
+  }
+
+  if (message.type === IM_OPEN_TAB_MESSAGE) {
+    const url = normalizeUrl(message.url);
+    if (!url) {
+      sendResponse({ type: IM_OPEN_TAB_MESSAGE, ok: false, error: "Invalid URL" });
+      return;
+    }
+
+    chrome.tabs.create({ url, active: true }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({
+          type: IM_OPEN_TAB_MESSAGE,
+          ok: false,
+          error: chrome.runtime.lastError.message || "Tab creation failed"
+        });
+        return;
+      }
+      sendResponse({ type: IM_OPEN_TAB_MESSAGE, ok: true });
     });
 
-  return true;
+    return true;
+  }
 });
 
 async function handleJsonFetchMessage(message) {
@@ -130,4 +155,3 @@ function tryParseJson(value) {
 function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
-
