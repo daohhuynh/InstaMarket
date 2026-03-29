@@ -214,7 +214,6 @@ Based purely on your personality and how you think, make ONE trading decision. U
     modelId: "amazon.nova-lite-v1:0",
     messages: [{ role: "user", content: [{ text: prompt }] }],
     inferenceConfig: { maxTokens: 400, temperature: 0.85 },
-    // OPTIMIZATION: Force the LLM to output perfect JSON
     toolConfig: {
       tools: [
         {
