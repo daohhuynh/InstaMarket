@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // INJECT.JS â€” entry point, injects tweet layers + sidebar
 // ============================================================
 
@@ -527,13 +527,22 @@
       }
       let simData = null;
       try {
-        const simReq = await fetch("http://localhost:3000/api/persona-sim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tweetText, market })
-        });
-        if (simReq.ok) {
-          simData = await simReq.json();
+        if (typeof fetchJsonWithExtensionSupport === 'function') {
+          simData = await fetchJsonWithExtensionSupport("http://localhost:3000/api/persona-sim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tweetText, market }),
+            timeoutMs: 45000
+          });
+        } else {
+          const simReq = await fetch("http://localhost:3000/api/persona-sim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tweetText, market })
+          });
+          if (simReq.ok) {
+            simData = await simReq.json();
+          }
         }
       } catch (err) {
         console.warn("[InstaMarket] Simulation fetch failed:", err);
