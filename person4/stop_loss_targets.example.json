@@ -1,0 +1,9 @@
+[
+  {
+    "market_id": "1",
+    "wallet_address": "demo_wallet_extension_user",
+    "open_side": "YES",
+    "stop_loss_cents": 40,
+    "shares": 10
+  }
+]

@@ -40,16 +40,11 @@ public:
             while (level.head < len && o.quantity > 0) {
                 Order& top = level.orders[level.head];
                 const uint64_t fill = (o.quantity < top.quantity) ? o.quantity : top.quantity;
+                
                 o.quantity -= fill;
                 top.quantity -= fill;
-                if (top.quantity == 0) {
-                    level.head++;
-                }
-            }
-
-            if (level.head > 0 && level.head == level.orders.size()) {
-                level.orders.clear();
-                level.head = 0;
+                
+                level.head += (top.quantity == 0);
             }
         }
 
@@ -57,6 +52,7 @@ public:
             own_book[price].orders.emplace_back(std::move(o));
         }
     }
+};
 
 class Engine {
     std::vector<PolymarketBook> markets;

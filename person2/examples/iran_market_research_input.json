@@ -1,0 +1,14 @@
+{
+  "market_id": "us-forces-enter-iran-mar-31-2026",
+  "question": "Will active US military personnel physically enter Iran by March 31, 2026?",
+  "url": "https://polymarket.com/event/us-forces-enter-iran-by",
+  "resolution_date": "2026-03-31T23:59:59-04:00",
+  "market_context": "Amid ongoing US-Israel airstrikes on Iran, an Iranian missile barrage on March 27 wounded US service members at Prince Sultan Air Base in Saudi Arabia. The Pentagon has surged additional Marines, 82nd Airborne elements, and naval assets into the Gulf region, while public reporting still indicates no deliberate US ground incursion into Iranian territory.",
+  "resolution_criteria": "Resolve YES only if active US military personnel deliberately enter the terrestrial territory of Iran for operational purposes by the listed date. Maritime or aerial entry does not count. Intelligence operatives, contractors, advisors, diplomats, and accidental entry do not count.",
+  "seed_queries": [
+    "\"US military\" Iran ground incursion",
+    "\"Trump\" Iran troops",
+    "\"Prince Sultan Air Base\" Iran US retaliation",
+    "\"82nd Airborne\" Iran deployment"
+  ]
+}

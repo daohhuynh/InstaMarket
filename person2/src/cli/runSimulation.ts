@@ -3,7 +3,9 @@ import { HttpMarketStateProvider } from "../adapters/MarketStateProvider.js";
 import { BedrockNovaLiteModel } from "../bedrock/BedrockNovaLiteModel.js";
 import { HeuristicLocalModel } from "../bedrock/HeuristicLocalModel.js";
 import type { PersonaSimulationConfig } from "../contracts/person2Contracts.js";
+import type { ResearchDossier } from "../contracts/researchDossier.js";
 import type { MarketState } from "../contracts/sharedSchemas.js";
+import { validateResearchDossier } from "../contracts/researchDossier.js";
 import { validateMarketState } from "../contracts/sharedSchemas.js";
 import { PersonaTradeSimulator } from "../persona/PersonaTradeSimulator.js";
 import {
@@ -14,8 +16,11 @@ import {
 } from "../persona/TwitterCommentsSource.js";
 import { SwarmOrchestrator } from "../swarm/SwarmOrchestrator.js";
 import { readJsonFile, writeJsonFile } from "../util/jsonFile.js";
+import { loadLocalEnvFiles } from "../util/loadEnvFile.js";
 
 async function main(): Promise<void> {
+  loadLocalEnvFiles();
+
   const args = process.argv.slice(2);
   if (args.includes("--help")) {
     printHelp();
@@ -25,10 +30,12 @@ async function main(): Promise<void> {
   const postUrl = requiredArg(args, "--post-url");
   const marketStateFile = optionalArg(args, "--market-state-file");
   const marketId = optionalArg(args, "--market-id");
+  const researchDossierFile = optionalArg(args, "--research-dossier-file");
   const submitToClob = args.includes("--submit");
   const outputDir = optionalArg(args, "--output-dir") ?? "output";
 
   const marketState = await resolveMarketState({ marketStateFile, marketId });
+  const researchDossier = await resolveResearchDossier(researchDossierFile);
   const commentsSource = await resolveCommentsSource(args);
 
   const region = process.env.AWS_REGION;
@@ -57,6 +64,7 @@ async function main(): Promise<void> {
     post_url: postUrl,
     market_state: marketState,
     submit_to_clob: submitToClob,
+    research_dossier: researchDossier,
   });
 
   const stamp = new Date().toISOString().replace(/[.:]/g, "-");
@@ -82,6 +90,7 @@ async function main(): Promise<void> {
       `Saved: ${simulationPath}`,
       `Saved: ${tradesPath}`,
       `Saved: ${thesisPath}`,
+      researchDossierFile ? `External evidence: ${researchDossierFile}` : `External evidence: not provided.`,
       useLocalModel ? `Model mode: local heuristic (--local-model or missing AWS_REGION).` : `Model mode: AWS Bedrock Nova Lite.`,
     ].join("\n") + "\n",
   );
@@ -105,6 +114,7 @@ Comments input (choose one):
 Optional:
   --submit                    Submit trades to CLOB endpoint
   --clob-endpoint <url>       (or CLOB_ENDPOINT env var)
+  --research-dossier-file <path>
   --output-dir <dir>          Default: output
   --local-model               Use deterministic local fallback instead of Bedrock
   --help
@@ -125,6 +135,16 @@ async function resolveMarketState(input: {
   const endpoint = process.env.MARKET_STATE_ENDPOINT;
   const provider = new HttpMarketStateProvider(requireString(endpoint, "Missing MARKET_STATE_ENDPOINT for --market-id flow."));
   return provider.getMarketState(marketId);
+}
+
+async function resolveResearchDossier(filePath?: string): Promise<ResearchDossier | undefined> {
+  if (!filePath) {
+    return undefined;
+  }
+
+  const dossier = await readJsonFile<unknown>(filePath);
+  validateResearchDossier(dossier);
+  return dossier;
 }
 
 async function resolveCommentsSource(args: string[]): Promise<TwitterCommentsSource> {

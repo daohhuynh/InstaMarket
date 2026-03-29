@@ -9,3 +9,5 @@ export * from "./persona/BankrollAllocator.js";
 export * from "./persona/PersonaTradeSimulator.js";
 export * from "./persona/TwitterCommentsSource.js";
 export * from "./swarm/SwarmOrchestrator.js";
+export * from "./thesis/contracts.js";
+export * from "./thesis/ThesisEngine.js";

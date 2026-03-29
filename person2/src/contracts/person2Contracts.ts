@@ -1,4 +1,5 @@
 import type { AISwarmThesis, MarketState, TradeExecution } from "./sharedSchemas.js";
+import type { ResearchDossier } from "./researchDossier.js";
 
 export interface TwitterComment {
   id: string;
@@ -19,6 +20,7 @@ export interface SwarmBuildInput {
   market_state: MarketState;
   comment: TwitterComment;
   persona: PersonaProfile;
+  research_dossier?: ResearchDossier;
 }
 
 export interface SwarmDecision {
