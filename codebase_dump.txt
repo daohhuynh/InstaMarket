@@ -257,7 +257,7 @@ Polymarket × Twitter. Bet on live markets while doomscrolling.
 4. Select this folder: `person3/chrome-extension/`
 5. Open [twitter.com](https://twitter.com) or [x.com](https://x.com)
 
-Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar, the Ditto button floating bottom-right, and market action pills injected under tweets that match existing markets.
+Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar and market action pills injected under tweets that match existing markets.
 
 ---
 
@@ -334,11 +334,7 @@ Live market matching lives in **`src/content/data.js`**:
 // Your persona simulation agent fills these
 ```
 
-### `DITTO_PROFILES` → Matchmaking service
-```js
-// { name, emoji, color, matchPct, reason }
-// v1: hardcoded | v2: real matching from InstaMarket user database
-```
+
 
 ### Tweet-to-market matching (no API credits)
 The extension now uses an offline text parser in `src/content/data.js`:
@@ -364,7 +360,7 @@ All colors/spacing live in CSS variables at the top of `src/styles/main.css`:
 ```css
 --pm-green: #00c853    /* YES / positive / up arrows */
 --pm-red: #ff3d57      /* NO / negative / down arrows */
---pm-purple: #7c3aed   /* Ditto / recommendations */
+--pm-purple: #7c3aed   /* recommendations */
 --pm-yellow: #f5a623   /* Warnings / hedges */
 --pm-bg: #0d0f13       /* Main background */
 --pm-surface: #161a23  /* Card background */
@@ -1136,29 +1132,6 @@ const MOCK_PERSONAS = [
   }
 ];
 
-const DITTO_PROFILES = [
-  {
-    name: "VegaTrader",
-    emoji: "⚡",
-    color: "#7c3aed",
-    matchPct: 94,
-    reason: "You both hold YES on OpenAI GPT-5 and NO on TikTok ban"
-  },
-  {
-    name: "AlphaSeeker",
-    emoji: "🎯",
-    color: "#3b82f6",
-    matchPct: 87,
-    reason: "Matching positions on Fed rates and BTC $150K"
-  },
-  {
-    name: "MarketWitch",
-    emoji: "🔮",
-    color: "#ec4899",
-    matchPct: 79,
-    reason: "Both bearish on Musk/Tesla and bullish on AI markets"
-  }
-];
 
 // Payoff curve data points (x = price paid, y = payout)
 const PAYOFF_CURVE_DATA = [
@@ -1602,7 +1575,6 @@ FILE: ./person3/chrome-extension/src/content/inject.js
   // ── Wait for DOM ready ──────────────────────────────────
   async function init() {
     mountSidebar();
-    mountDittoButton();
     await hydrateMarketUniverse();
     observeTweets();
   }
@@ -1646,49 +1618,6 @@ FILE: ./person3/chrome-extension/src/content/inject.js
     if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
   }
 
-  // ── Ditto floating button ───────────────────────────────
-  function mountDittoButton() {
-    if (document.getElementById('im-ditto-btn')) return;
-
-    const btn = document.createElement('button');
-    btn.id = 'im-ditto-btn';
-    btn.title = 'Ditto — Find your trading tribe';
-    // Real Ditto sprite from PokeAPI (official Nintendo/Game Freak sprites, open use)
-    btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto" style="width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 0 6px rgba(167,139,250,0.8));">`;
-    btn.addEventListener('click', toggleDittoModal);
-    document.body.appendChild(btn);
-
-    const modal = document.createElement('div');
-    modal.id = 'im-ditto-modal';
-    modal.innerHTML = `
-      <div class="im-ditto-header">
-        <div>
-          <div class="im-ditto-title"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" style="width:20px;height:20px;vertical-align:middle;image-rendering:pixelated;margin-right:6px;">Ditto Matchmaking</div>
-          <div class="im-ditto-sub">Your trading tribe</div>
-        </div>
-        <button class="im-ditto-close" onclick="document.getElementById('im-ditto-modal').classList.remove('open')">✕</button>
-      </div>
-      <div class="im-ditto-list">
-        ${DITTO_PROFILES.map(p => `
-          <div class="im-ditto-profile">
-            <div class="im-ditto-match-row">
-              <div class="im-ditto-avatar" style="background:${p.color};">${p.emoji}</div>
-              <div class="im-ditto-name">${p.name}</div>
-              <div class="im-ditto-pct">${p.matchPct}% match</div>
-            </div>
-            <div class="im-ditto-reason">${p.reason}</div>
-            <button class="im-ditto-connect">Connect → Trade Together</button>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    document.body.appendChild(modal);
-  }
-
-  function toggleDittoModal() {
-    const modal = document.getElementById('im-ditto-modal');
-    if (modal) modal.classList.toggle('open');
-  }
 
   // ── Tweet observation ────────────────────────────────────
   function observeTweets() {
@@ -1842,7 +1771,7 @@ A highly optimized, zero-allocation matching engine built to ingest the paper tr
 * **Endpoint:** `http://localhost:8080/api/paper-trades`
 
 ### 👉 For Person 2 (Swarm Architect):
-The engine is listening for `POST` requests at the endpoint above. 
+The engine is listening for `POST` requests at the endpoint above.
 
 **Expected Payload Format:**
 {
@@ -1877,7 +1806,7 @@ You can query these live tables using the standard `@supabase/supabase-js` clien
 
 ## 3. The Web3 Layer (Solana)
 
-The blockchain scaffolding handling the mock USDC escrow and on-chain position tracking. 
+The blockchain scaffolding handling the mock USDC escrow and on-chain position tracking.
 
 ### 👉 For Person 3 (Extension Lead):
 The local testnet is running continuously. Here is what you need to wire up the Phantom Wallet connect button in the React sidebar:
@@ -1915,7 +1844,7 @@ struct PriceLevel {
 class PolymarketBook {
     std::array<PriceLevel, 100> yes_book;
     std::array<PriceLevel, 100> no_book;
-    
+
 public:
     PolymarketBook() {
         for (auto& level : yes_book) level.orders.reserve(8192);
@@ -1925,20 +1854,20 @@ public:
     inline void submit(const Side side, const uint64_t price, Order&& o) {
         std::array<PriceLevel, 100>& opp_book = (side == Side::Yes) ? no_book : yes_book;
         std::array<PriceLevel, 100>& own_book = (side == Side::Yes) ? yes_book : no_book;
-        
+
         const uint64_t opp_price = 100 - price;
 
         for (uint64_t p = 1; p <= opp_price && o.quantity > 0; ++p) {
             PriceLevel& level = opp_book[p];
             const size_t len = level.orders.size();
-            
+
             while (level.head < len && o.quantity > 0) {
                 Order& top = level.orders[level.head];
                 const uint64_t fill = (o.quantity < top.quantity) ? o.quantity : top.quantity;
-                
+
                 o.quantity -= fill;
                 top.quantity -= fill;
-                
+
                 level.head += (top.quantity == 0);
             }
         }
@@ -1981,7 +1910,7 @@ struct ParsedPayload {
     uint64_t persona_id;
     uint64_t price;
     uint64_t quantity;
-    uint8_t side; 
+    uint8_t side;
 };
 
 class ZeroAllocJsonParser {
@@ -2011,7 +1940,7 @@ public:
         extract("\"persona_id\":", payload.persona_id);
         extract("\"price\":", payload.price);
         extract("\"quantity\":", payload.quantity);
-        
+
         size_t side_pos = view.find("\"side\":");
         if (side_pos != std::string_view::npos) {
             side_pos += 7;
@@ -2037,7 +1966,7 @@ FILE: ./person1_clob/src/main.cpp
 
 int main() {
     Engine engine;
-    engine.init_markets(100); 
+    engine.init_markets(100);
 
     ZeroAllocJsonParser parser;
 
@@ -2065,7 +1994,7 @@ int main() {
         ssize_t bytes_read = read(client_socket, read_buffer.data(), read_buffer.size());
         if (bytes_read > 0) {
             std::string_view chunk(read_buffer.data(), bytes_read);
-            
+
             size_t body_pos = chunk.find("\r\n\r\n");
             if (body_pos != std::string_view::npos) {
                 chunk.remove_prefix(body_pos + 4);
@@ -2083,7 +2012,7 @@ int main() {
                 );
             }
         }
-        
+
         const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";
         write(client_socket, response, strlen(response));
         close(client_socket);
@@ -2116,15 +2045,15 @@ async function main() {
     const wallet = Keypair.fromSecretKey(new Uint8Array(keyData));
 
     console.log(`Spinning up Mock USDC and minting ${mintAmount.toLocaleString()} tokens...`);
-    
+
     const mint = await createMint(connection, wallet, wallet.publicKey, null, 6);
     console.log(`\n✅ MOCK USDC TOKEN ADDRESS: ${mint.toBase58()}`);
 
     const tokenAccount = await getOrCreateAssociatedTokenAccount(connection, wallet, mint, wallet.publicKey);
-    
+
     // 2. Multiply your dynamic amount by the 6 decimal places (1,000,000)
     await mintTo(connection, wallet, mint, tokenAccount.address, wallet, mintAmount * 1_000_000);
-    
+
     console.log(`✅ Successfully injected ${mintAmount.toLocaleString()} Mock USDC into your wallet.`);
 }
 
