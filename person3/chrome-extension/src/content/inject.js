@@ -53,19 +53,6 @@
     if (main) main.classList.toggle("im-sidebar-hidden", collapsed);
   }
 
-  function observeTwitterPanels() {
-    const observer = new MutationObserver(() => {
-      const twitterPanelOpen = !!(
-        document.querySelector('[data-testid="DMDrawer"]') ||
-        document.querySelector('[data-testid="GrokDrawer"]') ||
-        document.querySelector('[aria-label="Direct Messages"]')
-      );
-      if (btn) btn.style.zIndex = twitterPanelOpen ? "1000" : "99999";
-      if (modal) modal.style.zIndex = twitterPanelOpen ? "1001" : "100001";
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-
   function readJsonLocalStorage(key) {
     try {
       const raw = localStorage.getItem(key);
