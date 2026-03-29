@@ -6,7 +6,7 @@ const IM_FETCH_JSON_MESSAGE = "IM_FETCH_JSON";
 const IM_OPEN_TAB_MESSAGE = "IM_OPEN_TAB";
 const DEFAULT_TIMEOUT_MS = 12000;
 const MIN_TIMEOUT_MS = 1000;
-const MAX_TIMEOUT_MS = 30000;
+const MAX_TIMEOUT_MS = 120000;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== "object") {

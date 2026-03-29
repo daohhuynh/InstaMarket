@@ -1561,7 +1561,7 @@ async function fetchJsonViaExtensionWorker(url, options = {}) {
 async function fetchJsonDirect(url, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutMs = clampNumber(Number(options.timeoutMs) || DEFAULT_FETCH_TIMEOUT_MS, 1000, 30000);
+  const timeoutMs = clampNumber(Number(options.timeoutMs) || DEFAULT_FETCH_TIMEOUT_MS, 1000, 120000);
   const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
@@ -3064,7 +3064,7 @@ async function runResearchThesisForTweet({ tweetText, market, postUrl, postAutho
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    timeoutMs: 30000,
+    timeoutMs: 120000,
   });
 
   return response;
