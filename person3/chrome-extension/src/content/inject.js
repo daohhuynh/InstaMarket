@@ -52,19 +52,106 @@
     toggle.classList.toggle('im-collapsed', collapsed);
     toggle.innerHTML = collapsed ? '❮' : '❯';
     if (main) main.classList.toggle('im-sidebar-hidden', collapsed);
+    // Show Ditto only when sidebar is collapsed
+    updateDittoVisibility();
+  }
+
+  function updateDittoVisibility() {
+    const sidebar = document.getElementById('im-sidebar');
+    const btn = document.getElementById('im-ditto-btn');
+    if (!btn || !sidebar) return;
+    const sidebarOpen = !sidebar.classList.contains('im-collapsed');
+    btn.classList.toggle('im-hidden', sidebarOpen);
+  }
+
+  function watchSidebarForDitto() {
+    const sidebar = document.getElementById('im-sidebar');
+    if (!sidebar) return;
+    new MutationObserver(() => updateDittoVisibility())
+      .observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function alignDittoToTwitterButtons() {
+    function attempt() {
+      // Find Grok and Chat drawers by their exact testids from Twitter's DOM
+      const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
+      const chatEl = document.querySelector('[data-testid="DMDrawer"]') ||
+                     document.querySelector('[data-testid="FloatingActionButtons"] a[href*="messages"]')?.closest('[style]') ||
+                     // fallback: find the fixed bottom-right button that is NOT the grok one
+                     Array.from(document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]'))
+                       .filter(el => {
+                         if (el.contains(grokEl)) return false;
+                         const r = el.getBoundingClientRect();
+                         return r.right > window.innerWidth - 100 && r.bottom > window.innerHeight - 120 && r.width > 40 && r.width < 80;
+                       })[0];
+
+      if (!grokEl) return false;
+
+      const grokRect = grokEl.getBoundingClientRect();
+      const btn = document.getElementById('im-ditto-btn');
+      if (!btn) return false;
+
+      // Measure the gap between Grok top and Chat top (same gap goes above Grok for Ditto)
+      let gap = 16; // sensible default
+      if (chatEl) {
+        const chatRect = chatEl.getBoundingClientRect();
+        gap = Math.max(8, grokRect.top - chatRect.top - grokRect.height);
+        // If that comes out weird, fall back to the visual spacing between the two buttons
+        if (gap <= 0) gap = chatRect.top - grokRect.bottom;
+        if (gap <= 0 || gap > 60) gap = 16;
+      }
+
+      // Use chat button for size + right alignment (it's the clean reference)
+      const chatRect = chatEl ? chatEl.getBoundingClientRect() : null;
+      const btnSize = chatRect ? Math.round(Math.min(chatRect.width, chatRect.height)) : 52;
+      const rightFromViewport = chatRect
+        ? Math.max(0, Math.round(window.innerWidth - chatRect.right) - 10)
+        : 14;
+
+      // Ditto bottom = distance from viewport bottom to TOP of GrokDrawer + same gap
+      const grokRect2 = grokEl.getBoundingClientRect();
+      const dittoBottom = Math.round(window.innerHeight - grokRect2.top + gap + 8);
+
+      btn.style.right  = rightFromViewport + 'px';
+      btn.style.bottom = dittoBottom + 'px';
+      btn.style.width  = btnSize + 'px';
+      btn.style.height = btnSize + 'px';
+
+      const modal = document.getElementById('im-ditto-modal');
+      if (modal) {
+        modal.style.right  = rightFromViewport + 'px';
+        modal.style.bottom = (dittoBottom + btnSize + 8) + 'px';
+      }
+      return true;
+    }
+
+    if (!attempt()) {
+      let tries = 0;
+      const interval = setInterval(() => {
+        if (attempt() || ++tries > 25) clearInterval(interval);
+      }, 500);
+    }
   }
 
   // ── Ditto floating button ───────────────────────────────
   function mountDittoButton() {
     if (document.getElementById('im-ditto-btn')) return;
 
+    const DITTO_IMG = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png`;
+
     const btn = document.createElement('button');
     btn.id = 'im-ditto-btn';
     btn.title = 'Ditto — Find your trading tribe';
-    // Real Ditto sprite from PokeAPI (official Nintendo/Game Freak sprites, open use)
-    btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto" style="width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 0 6px rgba(167,139,250,0.8));">`;
+    // icon inner div mirrors Twitter's exact structure: absolute inset-0, size-9 (36px)
+    btn.innerHTML = `
+      <div style="position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+        <img src="${DITTO_IMG}" alt="Ditto" style="width:44px;height:44px;image-rendering:pixelated;">
+      </div>`;
     btn.addEventListener('click', toggleDittoModal);
     document.body.appendChild(btn);
+
+    // Snap Ditto's right/bottom to match Twitter's top floating button exactly
+    alignDittoToTwitterButtons();
 
     const modal = document.createElement('div');
     modal.id = 'im-ditto-modal';
@@ -75,6 +162,25 @@
     closeBtn?.addEventListener('click', () => {
       modal.classList.remove('open');
     });
+
+    observeTwitterPanels();
+    updateDittoVisibility();
+    watchSidebarForDitto();
+  }
+
+  function observeTwitterPanels() {
+    const observer = new MutationObserver(() => {
+      const twitterPanelOpen = !!(
+        document.querySelector('[data-testid="DMDrawer"]') ||
+        document.querySelector('[data-testid="GrokDrawer"]') ||
+        document.querySelector('[aria-label="Direct Messages"]')
+      );
+      const btn = document.getElementById('im-ditto-btn');
+      const modal = document.getElementById('im-ditto-modal');
+      if (btn) btn.style.zIndex = twitterPanelOpen ? '1000' : '99999';
+      if (modal) modal.style.zIndex = twitterPanelOpen ? '1001' : '100001';
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   function toggleDittoModal() {

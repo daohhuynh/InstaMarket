@@ -27,9 +27,9 @@ function createSidebar() {
   sidebar.id = 'im-sidebar';
   sidebar.innerHTML = `
     <div class="im-tab-bar">
-      <button class="im-tab active" data-tab="portfolio">Portfolio</button>
-      <button class="im-tab" data-tab="markets">Markets</button>
-      <button class="im-tab" data-tab="saved">Saved</button>
+      <button class="im-tab active" data-tab="portfolio"><span>Portfolio</span></button>
+      <button class="im-tab" data-tab="markets"><span>Markets</span></button>
+      <button class="im-tab" data-tab="saved"><span>Saved</span></button>
     </div>
 
     <div class="im-tab-content active" id="im-tab-portfolio">

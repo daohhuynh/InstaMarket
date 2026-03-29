@@ -271,33 +271,59 @@
   right: 0;
 }
 
-/* Tab bar */
+/* Tab bar — matches Twitter's "For you / Following" style */
 .im-tab-bar {
   display: flex;
   border-bottom: 1px solid var(--pm-border);
-  background: var(--pm-bg);
+  background: rgba(13, 15, 19, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .im-tab {
   flex: 1;
-  padding: 14px 0;
+  padding: 14px 4px;
   text-align: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--pm-text-secondary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
-  background: none;
   border-top: none;
   border-left: none;
   border-right: none;
+  background: none;
   font-family: var(--pm-font);
+  position: relative;
+  transition: color 0.15s;
+}
+
+/* Twitter-style hover pill behind tab text */
+.im-tab::before {
+  content: '';
+  position: absolute;
+  inset: 5px 6px;
+  border-radius: var(--pm-radius-pill);
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.im-tab:hover::before {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.im-tab span {
+  position: relative; /* sits above ::before */
+  z-index: 1;
 }
 
 .im-tab.active {
   color: var(--pm-text);
+  font-weight: 700;
   border-bottom-color: var(--pm-green);
 }
 
@@ -818,97 +844,181 @@
 
 #im-ditto-btn {
   position: fixed;
-  /* Stack above Twitter's two native buttons (which sit at ~bottom:84px)
-     Twitter button height ~52px + 8px gap = 144px total from bottom */
-  bottom: 144px;
-  right: 12px;
+  /* Default fallback — JS alignDittoToTwitterButtons() overrides these at runtime */
+  bottom: 156px;
+  right: 14px;
   width: 52px;
   height: 52px;
-  border-radius: 50%;
-  background: var(--pm-purple);
-  border: 2px solid rgba(167,139,250,0.4);
+  border-radius: 17px;
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.5);
+  /* Large ambient glow — same floating effect as Twitter's Grok/Chat buttons,
+     plus purple tint for Ditto identity */
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08) inset,
+    0 4px 12px rgba(0,0,0,0.95),
+    0 12px 40px rgba(0,0,0,0.85),
+    0 24px 80px rgba(0,0,0,0.6),
+    0 0 60px rgba(255,255,255,0.18),
+    0 0 120px rgba(255,255,255,0.08);
   z-index: 99999;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.15s;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #im-ditto-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 28px rgba(124, 58, 237, 0.8);
+  transform: scale(1.05);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.12) inset,
+    0 4px 12px rgba(0,0,0,0.95),
+    0 12px 40px rgba(0,0,0,0.85),
+    0 24px 80px rgba(0,0,0,0.6),
+    0 0 80px rgba(255,255,255,0.28),
+    0 0 160px rgba(255,255,255,0.12);
+}
+
+/* Hidden when sidebar is open — hard display:none so it's truly gone */
+#im-ditto-btn.im-hidden {
+  display: none !important;
 }
 
 /* ============================================
    DITTO MODAL
    ============================================ */
 
+/* Ditto panel — same style as Twitter's Chat/Grok popup panel */
 #im-ditto-modal {
   display: none;
   position: fixed;
-  bottom: 206px;
+  bottom: 210px;
   right: 12px;
-  width: 320px;
-  background: var(--pm-surface);
-  border: 1px solid var(--pm-purple);
-  border-radius: var(--pm-radius);
+  width: 360px;
+  max-height: 70vh;
+  background: #000000;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
   z-index: 100001;
-  box-shadow: 0 8px 40px rgba(124, 58, 237, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06) inset,
+    0 8px 40px rgba(0,0,0,0.9),
+    0 24px 80px rgba(0,0,0,0.7);
   font-family: var(--pm-font);
   overflow: hidden;
+  flex-direction: column;
 }
 
-#im-ditto-modal.open { display: block; }
+#im-ditto-modal.open { display: flex; }
 
-.im-ditto-header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--pm-border);
+/* Panel top-bar — matches Twitter's expand/minimize row */
+.im-ditto-topbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 14px 0 14px;
+  gap: 10px;
+}
+
+.im-ditto-topbar-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.im-ditto-topbar-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+
+.im-ditto-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.im-ditto-hero img {
+  width: 52px;
+  height: 52px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 12px rgba(167,139,250,0.7));
+}
+
+.im-ditto-header {
+  padding: 0;
+  border-bottom: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .im-ditto-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--pm-text);
-  flex: 1;
+  text-align: center;
 }
 
 .im-ditto-sub {
-  font-size: 11px;
-  color: var(--pm-text-secondary);
+  font-size: 13px;
+  color: rgba(255,255,255,0.45);
+  text-align: center;
 }
 
 .im-ditto-close {
   background: none;
   border: none;
-  color: var(--pm-text-secondary);
+  color: rgba(255,255,255,0.4);
   cursor: pointer;
   font-size: 16px;
-  padding: 0;
+  padding: 4px;
   line-height: 1;
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s;
+}
+
+.im-ditto-close:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
 }
 
 .im-ditto-list {
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  overflow-y: auto;
 }
 
 .im-ditto-profile {
-  background: var(--pm-surface2);
-  border: 1px solid var(--pm-border);
-  border-radius: var(--pm-radius-sm);
-  padding: 10px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  transition: background 0.15s;
+}
+
+.im-ditto-profile:hover {
+  background: rgba(255,255,255,0.08);
 }
 
 .im-ditto-match-row {
