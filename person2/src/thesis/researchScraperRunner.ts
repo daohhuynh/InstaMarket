@@ -128,9 +128,27 @@ async function runScraperProcess(inputPath: string, outputPath: string): Promise
     args.push("--use-system-proxy");
   }
 
-  await spawnAndWait("python", args, 70_000).catch(async () => {
-    await spawnAndWait("py", args, 70_000);
-  });
+  const scraperTimeoutMs = parsePositiveInt(process.env.SCRAPER_PROCESS_TIMEOUT_MS, 120_000, 30_000, 600_000);
+  const preferredPython = (process.env.SCRAPER_PYTHON_BIN ?? "").trim();
+  const interpreters = [...new Set([preferredPython, "python3", "python", "py"].filter((value) => value.length > 0))];
+
+  let lastError: unknown = null;
+  for (const interpreter of interpreters) {
+    try {
+      await spawnAndWait(interpreter, args, scraperTimeoutMs);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const detail =
+    lastError instanceof Error
+      ? lastError.message
+      : typeof lastError === "string"
+        ? lastError
+        : "Unknown scraper launch failure.";
+  throw new Error(`Unable to execute scraper process (${interpreters.join(", ")}). ${detail}`);
 }
 
 function parsePositiveInt(raw: string | undefined, fallback: number, min: number, max: number): number {
@@ -288,7 +306,7 @@ function buildFallbackDossier(request: ThesisRequest, cause?: unknown): Research
       x_post_url: request.post_url,
       queries: buildSeedQueries(request),
     },
-    briefing_lines: [summary || "No tweet text provided for fallback dossier.", "Scraper process failed; using deterministic source seeds."],
+    briefing_lines: [summary || "No tweet text provided for fallback dossier."],
     source_counts: sourceCounts,
     sources: seedSources.map((source) => ({
       ...source,

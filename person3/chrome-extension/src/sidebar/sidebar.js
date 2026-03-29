@@ -14,6 +14,16 @@ const IM_RELATED_MARKETS_LIMIT = 24;
 let IM_STORAGE_SYNC_INITIALIZED = false;
 let IM_STORAGE_CHANGE_LISTENER_BOUND = false;
 const IM_STORAGE_MEMORY = Object.create(null);
+const SCRAPER_NOISE_PATTERNS = [
+  /scraper process failed;\s*using deterministic source seeds\.?/i,
+  /fallback mode:\s*scraper pipeline failed\.?/i,
+];
+
+function isNoisyScraperLine(value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  return SCRAPER_NOISE_PATTERNS.some((pattern) => pattern.test(text));
+}
 
 function setMarketResearch(marketId, research) {
   if (!marketId || !research) return;
@@ -497,7 +507,9 @@ function renderFullResearchData(data) {
   const thesis = data?.thesis || {};
   const allSources = Array.isArray(data?.allSources) ? data.allSources : [];
   const sourceCounts = data?.sourceCounts || {};
-  const briefingLines = Array.isArray(data?.briefingLines) ? data.briefingLines : [];
+  const briefingLines = Array.isArray(data?.briefingLines)
+    ? data.briefingLines.filter((line) => !isNoisyScraperLine(line))
+    : [];
   const isFallback = Boolean(data?.isFallback);
   const suggestedAction = data?.suggestedAction || 'SKIP';
   const suggestedAmount = Number(data?.suggestedAmount || 0);
@@ -526,7 +538,7 @@ function renderFullResearchData(data) {
       <span class="im2-chevron">▾</span>
     </div>
 
-    ${isFallback ? `<div class="im2-warning">Fallback mode: scraper pipeline failed.</div>` : ''}
+    ${isFallback && allSources.length === 0 ? `<div class="im2-warning">Research pipeline is degraded right now.</div>` : ''}
 
     ${coverageItems.length ? `
       <div class="im2-section-label" style="margin-top:10px;">COVERAGE</div>
@@ -1526,8 +1538,17 @@ function downloadResearchPdf(marketId) {
     const thesis = research.thesis || {};
     const dossier = research.dossier || {};
     const sources = coalesceSources(dossier.all_sources, dossier.top_sources);
-    const briefing = Array.isArray(dossier.briefing_lines) ? dossier.briefing_lines : [];
-    const collectionErrors = Array.isArray(dossier.collection_errors) ? dossier.collection_errors : [];
+    const briefing = Array.isArray(dossier.briefing_lines)
+      ? dossier.briefing_lines.filter((line) => !isNoisyScraperLine(line))
+      : [];
+    const collectionErrors = Array.isArray(dossier.collection_errors)
+      ? dossier.collection_errors
+          .map((item) => ({
+            source_type: String(item?.source_type || "unknown"),
+            error: String(item?.error || "Unknown error"),
+          }))
+          .filter((item) => !isNoisyScraperLine(item.error))
+      : [];
     const isFallback = Boolean(dossier.is_fallback);
     const generatedAt = new Date().toISOString();
 

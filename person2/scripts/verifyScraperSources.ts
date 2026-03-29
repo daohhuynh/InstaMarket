@@ -88,10 +88,23 @@ async function runPython(args: string[]): Promise<{ ok: true } | { ok: false; er
   env.NO_PROXY = "*";
   env.PYTHONDONTWRITEBYTECODE = "1";
 
-  const primary = await runCommand("python", args, env);
-  if (primary.ok) return primary;
-  const fallback = await runCommand("py", args, env);
-  return fallback.ok ? fallback : primary;
+  const preferredPython = (process.env.SCRAPER_PYTHON_BIN ?? "").trim();
+  const interpreters = [...new Set([preferredPython, "python3", "python", "py"].filter((value) => value.length > 0))];
+
+  let lastResult: { ok: true } | { ok: false; error: string } = {
+    ok: false,
+    error: "No Python interpreter candidates were provided.",
+  };
+
+  for (const interpreter of interpreters) {
+    const result = await runCommand(interpreter, args, env);
+    if (result.ok) {
+      return result;
+    }
+    lastResult = result;
+  }
+
+  return lastResult;
 }
 
 async function runCommand(

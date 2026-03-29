@@ -37,7 +37,7 @@ AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 npm run simulate -- 
 
 ```bash
 cd person2
-python -m signalmarket_scrapers \
+python3 -m signalmarket_scrapers \
   --market-research-file ./examples/iran_market_research_input.json \
   --output ./output/iran_research_dossier.json
 ```
@@ -57,6 +57,8 @@ Environment variables used by the scraper:
 - `SCRAPER_DISABLE_APIFY=true` to force direct web/RSS mode (no actor calls)
 - `LAVA_API_KEY` and `LAVA_X_ENDPOINT` for X fallback when Apify X actors are blocked
 - `SCRAPER_MAX_ITEMS_PER_SOURCE`, `SCRAPER_HTTP_TIMEOUT_SECONDS`, `SCRAPER_HTTP_RETRIES` for production tuning
+- `SCRAPER_PROCESS_TIMEOUT_MS` to raise/lower overall scraper subprocess timeout (default `120000`)
+- `SCRAPER_PYTHON_BIN` to force a specific Python executable path (optional)
 - `SCRAPER_USE_SYSTEM_PROXY` (defaults false). Keep false unless you explicitly need a corporate proxy
 
 ## Run with external evidence
