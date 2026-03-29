@@ -3046,11 +3046,14 @@ async function runResearchThesisForTweet({ tweetText, market, postUrl, postAutho
   const body = {
     tweet_text: typeof tweetText === "string" ? tweetText : "",
     market: {
-      id: String(market?.id ?? ""),
+      market_id: String(market?.id ?? ""),
       question: String(market?.question ?? ""),
       category: String(market?.category ?? ""),
-      yesOdds: market?.yesOdds ?? null,
-      noOdds: market?.noOdds ?? null,
+      event_title: String(market?.eventTitle ?? ""),
+      yes_odds: market?.yesOdds ?? null,
+      no_odds: market?.noOdds ?? null,
+      volume: market?.volume ?? "",
+      resolution_date: market?.endDate ?? "",
     },
     post_url: typeof postUrl === "string" ? postUrl : "",
     post_author: typeof postAuthor === "string" ? postAuthor : "",
