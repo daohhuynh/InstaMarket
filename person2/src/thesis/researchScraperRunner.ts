@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { delimiter, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import type { ResearchDossier } from "../contracts/researchDossier.js";
 import { validateResearchDossier } from "../contracts/researchDossier.js";
 import type { ThesisRequest } from "./contracts.js";
@@ -19,12 +20,13 @@ const SOURCE_LABELS: Record<string, string> = {
   google: "Google",
   tiktok: "TikTok",
 };
+const SCRAPER_PROJECT_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
 export async function buildResearchDossierFromScrapers(
   request: ThesisRequest,
   onEvent?: (event: ScraperProgressEvent) => void,
 ): Promise<ResearchDossier> {
-  const outputDir = resolve(process.cwd(), "output");
+  const outputDir = resolve(SCRAPER_PROJECT_ROOT, "output");
   await mkdir(outputDir, { recursive: true });
 
   const stamp = new Date().toISOString().replace(/[.:]/g, "-");
@@ -65,7 +67,7 @@ export async function buildResearchDossierFromScrapers(
     return dossier;
   } catch (error) {
     sourceEventTimer.cancel();
-    onEvent?.({ type: "scraper_done", message: "Scraper failed — using fallback sources", source_counts: {} });
+    onEvent?.({ type: "scraper_done", message: "Source collection degraded; continuing with fallback seeds", source_counts: {} });
     return buildFallbackDossier(request, error);
   } finally {
     await safeCleanup(inputPath);
@@ -135,7 +137,7 @@ async function runScraperProcess(inputPath: string, outputPath: string): Promise
   let lastError: unknown = null;
   for (const interpreter of interpreters) {
     try {
-      await spawnAndWait(interpreter, args, scraperTimeoutMs);
+      await spawnAndWait(interpreter, args, scraperTimeoutMs, SCRAPER_PROJECT_ROOT);
       return;
     } catch (error) {
       lastError = error;
@@ -176,7 +178,7 @@ function parseBooleanEnv(raw: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-async function spawnAndWait(command: string, args: string[], timeoutMs: number): Promise<void> {
+async function spawnAndWait(command: string, args: string[], timeoutMs: number, cwd: string): Promise<void> {
   const childEnv = { ...process.env };
   delete childEnv.HTTP_PROXY;
   delete childEnv.HTTPS_PROXY;
@@ -185,10 +187,13 @@ async function spawnAndWait(command: string, args: string[], timeoutMs: number):
   delete childEnv.https_proxy;
   delete childEnv.all_proxy;
   childEnv.NO_PROXY = "*";
+  childEnv.PYTHONPATH = childEnv.PYTHONPATH
+    ? `${SCRAPER_PROJECT_ROOT}${delimiter}${childEnv.PYTHONPATH}`
+    : SCRAPER_PROJECT_ROOT;
 
   await new Promise<void>((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
