@@ -160,9 +160,9 @@ function renderMarketsTab(activeMarketId) {
   if (!markets.length) {
     return `
       ${renderEmptyPanel(
-        'No live markets loaded',
-        'Could not load active Polymarket markets yet. Click refresh to retry.'
-      )}
+      'No live markets loaded',
+      'Could not load active Polymarket markets yet. Click refresh to retry.'
+    )}
       <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
     `;
   }
@@ -412,7 +412,7 @@ function renderThesisCard(research) {
         </div>
         <div class="im2-evidence-group">
           <div class="im2-evidence-bars">
-            ${[1,2,3].map(i => `<div class="im2-ev-bar ${i <= evBars ? 'im2-ev-bar--filled' : ''}"></div>`).join('')}
+            ${[1, 2, 3].map(i => `<div class="im2-ev-bar ${i <= evBars ? 'im2-ev-bar--filled' : ''}"></div>`).join('')}
           </div>
           <span class="im2-evidence-label">${escapeHtml(evidenceQuality)}</span>
         </div>
@@ -484,21 +484,22 @@ function renderThesisCard(research) {
       <div class="im2-bottom-actions">
         <button class="im2-bottom-btn" data-im-action="refresh-live-markets">↺ Refresh Live Markets</button>
         <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">↓ PDF</button>
+        <button class="im2-bottom-btn" data-im-action="toggle-full-research" data-market-id="${escapeHtml(marketId)}">${research.showFullData ? 'Hide Details' : 'Show Full Research'}</button>
       </div>
 
-      ${renderFullResearchData({
-        thesis,
-        market,
-        reportId,
-        isFallback: Boolean(dossier.is_fallback),
-        briefingLines,
-        sourceCounts,
-        allSources: effectiveSources,
-        collectionErrors: Array.isArray(dossier.collection_errors) ? dossier.collection_errors : [],
-        suggestedAction,
-        suggestedAmount,
-        marketId,
-      })}
+      ${research.showFullData ? renderFullResearchData({
+    thesis,
+    market,
+    reportId,
+    isFallback: Boolean(dossier.is_fallback),
+    briefingLines,
+    sourceCounts,
+    allSources: effectiveSources,
+    collectionErrors: Array.isArray(dossier.collection_errors) ? dossier.collection_errors : [],
+    suggestedAction,
+    suggestedAmount,
+    marketId,
+  }) : ''}
       
       ${renderSimulationData(research.simulation)}
       
@@ -559,15 +560,15 @@ function renderFullResearchData(data) {
       <div class="im2-section-label" style="margin-top:10px;">BRIEFING</div>
       <div class="im2-briefing-list">
         ${briefingLines.slice(0, BRIEFING_INIT).map((line, idx) => {
-          const st = getBriefingSourceType(line, allSources, idx);
-          return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
-        }).join('')}
+    const st = getBriefingSourceType(line, allSources, idx);
+    return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
+  }).join('')}
         ${hasBriefingMore ? `
           <div class="im2-briefing-more" id="${escapeHtml(briefingId)}" style="display:none;flex-direction:column;gap:8px;">
             ${briefingLines.slice(BRIEFING_INIT).map((line, idx) => {
-              const st = getBriefingSourceType(line, allSources, BRIEFING_INIT + idx);
-              return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
-            }).join('')}
+    const st = getBriefingSourceType(line, allSources, BRIEFING_INIT + idx);
+    return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
+  }).join('')}
           </div>
           <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">∨ Show more</button>
         ` : ''}
@@ -582,14 +583,14 @@ function renderFullResearchData(data) {
     </div>
     <div class="im2-sources-list">
       ${allSources.length ? allSources.map(source => {
-        const rel = Number(source.relevance_score) || 0;
-        const relClass = rel >= 0.7 ? 'im2-rel--high' : rel >= 0.5 ? 'im2-rel--mid' : 'im2-rel--low';
-        const st = String(source.source_type || 'unknown').toLowerCase();
-        const sourceUrl = sanitizePostUrl(source.url || '');
-        const sourceActionAttrs = sourceUrl
-          ? ` data-im-action="open-source-link" data-source-url="${escapeHtml(sourceUrl)}" title="Open source website" role="button" tabindex="0"`
-          : '';
-        return `
+    const rel = Number(source.relevance_score) || 0;
+    const relClass = rel >= 0.7 ? 'im2-rel--high' : rel >= 0.5 ? 'im2-rel--mid' : 'im2-rel--low';
+    const st = String(source.source_type || 'unknown').toLowerCase();
+    const sourceUrl = sanitizePostUrl(source.url || '');
+    const sourceActionAttrs = sourceUrl
+      ? ` data-im-action="open-source-link" data-source-url="${escapeHtml(sourceUrl)}" title="Open source website" role="button" tabindex="0"`
+      : '';
+    return `
           <div class="im2-source-card ${sourceUrl ? 'im2-source-card-link' : ''}"${sourceActionAttrs}>
             <div class="im2-source-header">
               <span class="im2-source-dot im2-source-dot--${st}"></span>
@@ -600,7 +601,7 @@ function renderFullResearchData(data) {
             ${(source.snippet || source.raw_text) ? `<div class="im2-source-snippet">${escapeHtml((source.snippet || source.raw_text || '').slice(0, 150))}</div>` : ''}
           </div>
         `;
-      }).join('') : '<div class="im2-muted">No sources available.</div>'}
+  }).join('') : '<div class="im2-muted">No sources available.</div>'}
     </div>
   `;
 }
@@ -1567,11 +1568,11 @@ function downloadResearchPdf(marketId) {
       : [];
     const collectionErrors = Array.isArray(dossier.collection_errors)
       ? dossier.collection_errors
-          .map((item) => ({
-            source_type: String(item?.source_type || "unknown"),
-            error: String(item?.error || "Unknown error"),
-          }))
-          .filter((item) => !isNoisyScraperLine(item.error))
+        .map((item) => ({
+          source_type: String(item?.source_type || "unknown"),
+          error: String(item?.error || "Unknown error"),
+        }))
+        .filter((item) => !isNoisyScraperLine(item.error))
       : [];
     const isFallback = Boolean(dossier.is_fallback);
     const generatedAt = new Date().toISOString();
@@ -1760,8 +1761,8 @@ function switchSidebarToSaved() {
   }
 }
 function renderSimulationData(sim) {
-  if (!sim || !sim.decisions) return ''; 
-  
+  if (!sim || !sim.decisions) return '';
+
   const edgeClass = sim.edgeVsMarket.includes('+') ? 'im2-pipeline-yes' : 'im2-pipeline-no';
 
   return `
