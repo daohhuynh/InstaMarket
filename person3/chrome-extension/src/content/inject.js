@@ -259,13 +259,16 @@
     const safeVolume = escapeHtml(market.volume || '$0 Vol');
     const safeMarketId = escapeHtml(String(market.id));
     const safeMarketUrl = escapeHtml(market.polymarketUrl || '');
+    const questionMarkup = safeMarketUrl
+      ? `<a class="im-market-question-link" href="${safeMarketUrl}" target="_blank" rel="noopener noreferrer" title="Open on Polymarket">${safeQuestion}</a>`
+      : safeQuestion;
 
     const layer = document.createElement('div');
     layer.className = 'im-tweet-layer';
     layer.innerHTML = `
       <div class="im-market-shell">
         <div class="im-market-header">
-          <span class="im-market-question">${safeQuestion}</span>
+          <span class="im-market-question">${questionMarkup}</span>
         </div>
         <div class="im-probability-panel">
           <div class="im-probability-meta-row">
@@ -388,6 +391,11 @@
       if (targetUrl) {
         window.open(targetUrl, '_blank', 'noopener,noreferrer');
       }
+    });
+
+    const questionLink = layer.querySelector('.im-market-question-link');
+    questionLink?.addEventListener('click', e => {
+      e.stopPropagation();
     });
 
     // Insert before the tweet action row so the card reads like part of the post.

@@ -21,6 +21,7 @@ const MATCH_STOP_WORDS = new Set([
   "news", "story", "update", "market", "odds", "bet", "yes", "no", "true", "false",
   "email", "gmail", "http", "https", "www", "com",
   "official", "officially", "challenge", "group", "private", "like", "comment", "follow", "following",
+  "show", "ad", "ads", "sponsored", "promo", "promoted", "demo",
   "someone", "thing", "things", "hey", "just", "really", "very", "much",
   "get", "got", "make", "made", "using", "used", "use", "turn", "turned"
 ]);
@@ -70,6 +71,7 @@ const TOKEN_CANONICAL_MAP = new Map([
   ["spx", "sp500"],
   ["snp", "sp500"],
   ["tesla", "tesla"],
+  ["starship", "spacex"],
   ["musk", "musk"],
   ["elon", "musk"],
   ["trump", "trump"],
@@ -1230,6 +1232,14 @@ function selectParserMatchFromRanked(ranked, tweetText = "") {
   const hasEntityDrivenSignal =
     (strictEntityOverlap >= 1 && highSignalQuestionOverlap >= 1) ||
     hasRareBackstop;
+  // Recall backstop for entity-led posts (e.g., Elon/Starship tweets) that may
+  // only overlap on one high-value entity token but still represent the right market family.
+  const hasEntityNameBackstop =
+    strictEntitySignals.length > 0 &&
+    strictEntityOverlap >= 1 &&
+    questionOverlap >= 1 &&
+    best.score >= 10.5 &&
+    margin >= 1.0;
   const hasRoboticsBackstop =
     hasRoboticsAlignment &&
     best.score >= 7 &&
@@ -1238,14 +1248,14 @@ function selectParserMatchFromRanked(ranked, tweetText = "") {
 
   if (!hasStrongScore && !hasWeakScore) return null;
   if (!hasEntityAlignment && questionOverlap < 2) return null;
-  if (!hasStrongQuestionSignal && !hasFallbackQuestionSignal && !hasRoboticsBackstop) return null;
-  if (!hasPhraseEvidence && !hasMultiQuestionSignal && !hasEntityDrivenSignal && !hasRoboticsBackstop) return null;
-  if (!hasExactPhrase && !hasAnchorSignals && !hasStrongSingleSignal && !hasEntityDrivenSignal && !hasRoboticsBackstop) return null;
-  if (distinctMatches < 2 && !hasStrongSingleSignal && !hasAnchorSignals && !hasRoboticsBackstop) return null;
+  if (!hasStrongQuestionSignal && !hasFallbackQuestionSignal && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
+  if (!hasPhraseEvidence && !hasMultiQuestionSignal && !hasEntityDrivenSignal && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
+  if (!hasExactPhrase && !hasAnchorSignals && !hasStrongSingleSignal && !hasEntityDrivenSignal && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
+  if (distinctMatches < 2 && !hasStrongSingleSignal && !hasAnchorSignals && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
   if (margin < 1.5 && best.score < 14 && !hasAnchorSignals) return null;
-  if (questionOverlap < 2 && !hasPhraseEvidence && !hasEntityDrivenSignal && !hasRoboticsBackstop) return null;
-  if (questionOverlap < 2 && strictEntityOverlap < 1 && !hasPhraseEvidence && !hasRoboticsBackstop) return null;
-  if (highSignalQuestionOverlap < 1 && !hasPhraseEvidence && !hasStrongSingleSignal && !hasEntityDrivenSignal && !hasRoboticsBackstop) return null;
+  if (questionOverlap < 2 && !hasPhraseEvidence && !hasEntityDrivenSignal && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
+  if (questionOverlap < 2 && strictEntityOverlap < 1 && !hasPhraseEvidence && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
+  if (highSignalQuestionOverlap < 1 && !hasPhraseEvidence && !hasStrongSingleSignal && !hasEntityDrivenSignal && !hasEntityNameBackstop && !hasRoboticsBackstop) return null;
   if (!tweetHasSufficientSignal(tweetTokens) && !hasExactPhrase) return null;
   if (strictEntitySignals.length > 0 && strictEntityOverlap < 1 && !hasDomainOverlap && best.score < 18) return null;
   if (tweetDomainGroups.size > 0 && !hasDomainOverlap && !hasExactPhrase && best.score < 18) return null;

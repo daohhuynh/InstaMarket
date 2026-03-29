@@ -1510,6 +1510,15 @@
   word-break: break-word;
 }
 
+.im-market-question-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.im-market-question-link:hover {
+  text-decoration: underline;
+}
+
 .im-probability-panel {
   display: flex;
   flex-direction: column;
