@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { AnimatedMetric } from "./AnimatedMetric";
 import { LiveLineChart } from "./LiveLineChart";
+import { useInViewOnce } from "../hooks/useInViewOnce";
 import type { MarketRecord } from "../types";
 
 interface HeroMarketPanelProps {
@@ -16,9 +17,11 @@ export function HeroMarketPanel({
   market,
 }: HeroMarketPanelProps) {
   const positive = market.change24h >= 0;
+  const { ref, isVisible } = useInViewOnce({ threshold: 0.28 });
 
   return (
     <motion.section
+      ref={ref as never}
       className="hero-panel"
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
@@ -38,7 +41,7 @@ export function HeroMarketPanel({
           <div>
             <div className="hero-market-title">{market.title}</div>
             <div className="hero-market-subtitle">
-              {market.sourceBias} Â· {market.narrative}
+              {market.sourceBias} · {market.narrative}
             </div>
           </div>
         </div>
@@ -49,6 +52,7 @@ export function HeroMarketPanel({
               className="hero-probability-value"
               value={market.probability}
               suffix="%"
+              start={isVisible}
             />
             <span className="hero-probability-label">chance</span>
           </div>
@@ -59,6 +63,8 @@ export function HeroMarketPanel({
               prefix={positive ? "+" : "-"}
               suffix=" pts"
               decimals={1}
+              start={isVisible}
+              delay={0.06}
             />
           </div>
         </div>
@@ -76,7 +82,7 @@ export function HeroMarketPanel({
         <div className="metric-box">
           <span>Confidence</span>
           <strong>
-            <AnimatedMetric value={market.confidence} suffix="%" />
+            <AnimatedMetric value={market.confidence} suffix="%" start={isVisible} delay={0.1} />
           </strong>
         </div>
         <div className="metric-box">
@@ -85,7 +91,7 @@ export function HeroMarketPanel({
         </div>
       </div>
 
-      <LiveLineChart points={market.chartPoints} />
+      <LiveLineChart points={market.chartPoints} visible={isVisible} delay={0.1} />
 
       <div className="hero-tag-row">
         {market.tags.map((tag) => (

@@ -1,5 +1,5 @@
 // ============================================================
-// SIDEBAR — renders the InstaMarket right sidebar (live-data only)
+// SIDEBAR ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â renders the InstaMarket right sidebar (live-data only)
 // ============================================================
 
 const IM_MARKET_RESEARCH = {};
@@ -37,6 +37,7 @@ function createSidebar() {
       <button class="im-tab" data-tab="markets"><span>Markets</span></button>
       <button class="im-tab" data-tab="saved"><span>Saved</span></button>
     </div>
+
 
     <div class="im-tab-content active" id="im-tab-portfolio">
       ${renderPortfolioTab()}
@@ -130,8 +131,8 @@ function renderBetRow(entry) {
         <div class="im-position-title">${escapeHtml(entry.question || 'Unknown market')}</div>
         <div class="im-position-meta">
           <span style="color:${positiveSide ? 'var(--pm-green)' : 'var(--pm-red)'};">${escapeHtml(entry.side)}</span>
-          ${amountLabel ? `&nbsp;·&nbsp;${escapeHtml(amountLabel)}` : ''}
-          &nbsp;·&nbsp;${formatTimestamp(entry.placedAt)}
+          ${amountLabel ? `&nbsp;Ãƒâ€šÃ‚Â·&nbsp;${escapeHtml(amountLabel)}` : ''}
+          &nbsp;Ãƒâ€šÃ‚Â·&nbsp;${formatTimestamp(entry.placedAt)}
         </div>
       </div>
       <div
@@ -382,13 +383,13 @@ function renderThesisCard(research) {
 
   const convDotClass = conviction === 'High' ? 'im2-dot--yes' : conviction === 'Medium' ? 'im2-dot--skip' : 'im2-dot--no';
   const evBars = evidenceQuality === 'Strong' ? 3 : evidenceQuality === 'Moderate' ? 2 : 1;
-  const biasArrow = suggestedAction === 'YES' ? '↗' : suggestedAction === 'NO' ? '↘' : '→';
+  const biasArrow = suggestedAction === 'YES' ? 'ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â€' : suggestedAction === 'NO' ? 'ÃƒÂ¢Ã¢â‚¬Â Ã‹Å“' : 'ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢';
 
   return `
     <div class="im2-report-panel">
       <div class="im2-report-header">
         <span class="im2-report-label">REPORT</span>
-        <span class="im2-report-sep">·</span>
+        <span class="im2-report-sep">Ãƒâ€šÃ‚Â·</span>
         <span class="im2-report-id">${escapeHtml(reportId || (marketId ? marketId.slice(0, 24) : 'n/a'))}</span>
       </div>
 
@@ -432,7 +433,7 @@ function renderThesisCard(research) {
       <div class="im2-mme-panel">
         <div class="im2-mme-cell">
           <div class="im2-mme-label">MARKET</div>
-          <div class="im2-mme-value">${yesOdds !== null ? Math.round(yesOdds) + '%' : '—'}</div>
+          <div class="im2-mme-value">${yesOdds !== null ? Math.round(yesOdds) + '%' : 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â'}</div>
         </div>
         <div class="im2-mme-div"></div>
         <div class="im2-mme-cell">
@@ -442,7 +443,7 @@ function renderThesisCard(research) {
         <div class="im2-mme-div"></div>
         <div class="im2-mme-cell">
           <div class="im2-mme-label">EDGE</div>
-          <div class="im2-mme-value ${edge !== null ? (edge >= 0 ? 'im2-mme-yes' : 'im2-mme-no') : ''}">${edge !== null ? (edge >= 0 ? '+' : '') + Math.round(edge) + ' pts' : '—'}</div>
+          <div class="im2-mme-value ${edge !== null ? (edge >= 0 ? 'im2-mme-yes' : 'im2-mme-no') : ''}">${edge !== null ? (edge >= 0 ? '+' : '') + Math.round(edge) + ' pts' : 'ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â'}</div>
         </div>
       </div>
 
@@ -461,19 +462,19 @@ function renderThesisCard(research) {
           <span class="im2-amount-suf">USDC</span>
         </div>
         <div class="im2-stop-row">
-          <span class="im2-stop-icon">◎</span>
+          <span class="im2-stop-icon">ÃƒÂ¢Ã¢â‚¬â€Ã…Â½</span>
           <span class="im2-stop-text">Stop loss: <span class="im2-stop-val">${maxStopLoss}c</span></span>
         </div>
         <button class="im2-cta-btn im2-cta-btn--active" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">
           Place Bet${suggestedAction === 'SKIP' ? ' (Model says SKIP)' : ` ${escapeHtml(suggestedAction)}`}
         </button>
-        ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">↗ Open on Polymarket</a>` : ''}
+        ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â€ Open on Polymarket</a>` : ''}
       </div>
 
       <div class="im2-sep"></div>
       <div class="im2-bottom-actions">
-        <button class="im2-bottom-btn" data-im-action="refresh-live-markets">↺ Refresh Live Markets</button>
-        <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">↓ PDF</button>
+        <button class="im2-bottom-btn" data-im-action="refresh-live-markets">ÃƒÂ¢Ã¢â‚¬Â Ã‚Âº Refresh Live Markets</button>
+        <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“ PDF</button>
       </div>
 
       ${renderFullResearchData({
@@ -523,7 +524,7 @@ function renderFullResearchData(data) {
     <div class="im2-section-header-row">
       <span class="im2-section-label">AGENT PIPELINE</span>
       <span class="im2-pipeline-decision ${decisionClass}">${escapeHtml(agentDecision)}</span>
-      <span class="im2-chevron">▾</span>
+      <span class="im2-chevron">ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¾</span>
     </div>
 
     ${isFallback ? `<div class="im2-warning">Fallback mode: scraper pipeline failed.</div>` : ''}
@@ -554,7 +555,7 @@ function renderFullResearchData(data) {
               return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
             }).join('')}
           </div>
-          <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">∨ Show more</button>
+          <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">ÃƒÂ¢Ã‹â€ Ã‚Â¨ Show more</button>
         ` : ''}
       </div>
     ` : ''}
@@ -563,7 +564,7 @@ function renderFullResearchData(data) {
     <div class="im2-section-header-row">
       <span class="im2-section-label">SOURCES</span>
       <span class="im2-sources-count">${allSources.length} total</span>
-      <span class="im2-chevron">▴</span>
+      <span class="im2-chevron">ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â´</span>
     </div>
     <div class="im2-sources-list">
       ${allSources.length ? allSources.map(source => {
@@ -734,7 +735,7 @@ function renderPortfolioResearchSection() {
 function renderMarketCard(market, isBest) {
   const marketUrl = sanitizePostUrl(market.polymarketUrl || '');
   const marketLink = market.polymarketUrl
-    ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
+    ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â€</a>`
     : '';
   const cardActionAttrs = marketUrl
     ? ` data-im-action="open-market-link" data-market-url="${escapeHtml(marketUrl)}" title="Open market on Polymarket" role="button" tabindex="0"`
@@ -746,7 +747,7 @@ function renderMarketCard(market, isBest) {
       <div class="im-market-title">${escapeHtml(market.question)}</div>
       <div class="im-market-meta">
         <span>${escapeHtml(market.volume || '$0 Vol')}</span>
-        ${market.category ? `<span>· ${escapeHtml(market.category)}</span>` : ''}
+        ${market.category ? `<span>Ãƒâ€šÃ‚Â· ${escapeHtml(market.category)}</span>` : ''}
         ${marketLink}
       </div>
       <div class="im-market-odds-row">
@@ -806,7 +807,7 @@ function renderSavedTab() {
         <div class="im-market-title">${escapeHtml(item.question)}</div>
         <div class="im-market-meta">
           <span>Saved ${formatTimestamp(item.savedAt)}</span>
-          <span style="margin-left:4px;">· Saved at ${item.savedYesOdds}% YES</span>
+          <span style="margin-left:4px;">Ãƒâ€šÃ‚Â· Saved at ${item.savedYesOdds}% YES</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           ${deltaHtml}
@@ -874,10 +875,6 @@ function bindSidebarEvents() {
     }
 
     if (action === 'open-market-link') {
-      if (event.target?.closest?.('a[href]')) {
-        return;
-      }
-
       const marketUrl = sanitizePostUrl(target.getAttribute('data-market-url') || '');
       if (!marketUrl) {
         showToast('No Polymarket URL available for this market.');
@@ -889,6 +886,7 @@ function bindSidebarEvents() {
       }
       return;
     }
+
 
     if (action === 'show-bet-amount') {
       const sideLabel = target.getAttribute('data-side') === 'NO' ? 'NO' : 'YES';
@@ -965,11 +963,11 @@ function bindSidebarEvents() {
       const expanded = target.getAttribute('data-expanded') === '1';
       if (expanded) {
         moreDiv.style.display = 'none';
-        target.textContent = '∨ Show more';
+        target.textContent = 'ÃƒÂ¢Ã‹â€ Ã‚Â¨ Show more';
         target.setAttribute('data-expanded', '0');
       } else {
         moreDiv.style.display = 'flex';
-        target.textContent = '∧ Show less';
+        target.textContent = 'ÃƒÂ¢Ã‹â€ Ã‚Â§ Show less';
         target.setAttribute('data-expanded', '1');
       }
       return;
@@ -1188,6 +1186,9 @@ function storeJsonLocalStorage(key, value) {
   writeJsonToLocalOnly(key, normalized);
 
   if (!isChromeStorageAvailable()) {
+    if (IM_PERSISTENT_KEYS.includes(key)) {
+      syncPersistentStateToBridge();
+    }
     return;
   }
 
@@ -1195,6 +1196,10 @@ function storeJsonLocalStorage(key, value) {
     chrome.storage.local.set({ [key]: normalized });
   } catch {
     // Ignore extension storage write failures.
+  }
+
+  if (IM_PERSISTENT_KEYS.includes(key)) {
+    syncPersistentStateToBridge();
   }
 }
 
@@ -1486,9 +1491,13 @@ function getWalletAddress() {
   } catch {
     // Ignore localStorage errors.
   }
-  return 'demo_wallet_extension_user';
+  return 'e6GL3bnASNU1WvK9LPJaxVyyu5f9H9GtAqMYNXE9D2u';
 }
 
+
+async function syncPersistentStateToBridge() {
+  return;
+}
 async function submitBetToBridge(payload) {
   const endpoint = 'http://localhost:3000/api/bet';
   if (typeof fetchJsonWithExtensionSupport === 'function') {
@@ -1723,3 +1732,7 @@ window.setSidebarActiveMarketFromViewport = setSidebarActiveMarketFromViewport;
 window.switchSidebarToSaved = switchSidebarToSaved;
 window.saveMarketForLater = saveMarketForLater;
 window.recordSidebarBet = recordSidebarBet;
+
+
+
+

@@ -14,19 +14,19 @@ export function MarketCardGrid({ markets }: MarketCardGridProps) {
       <motion.section
         key={markets.map((market) => market.id).join("-")}
         className="market-grid"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
+        initial={false}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
       >
-        {markets.map((market) => {
+        {markets.map((market, index) => {
           if (market.chartVariant === "leaderboard") {
-            return <ElectionLeaderboardCard key={market.id} market={market} />;
+            return <ElectionLeaderboardCard key={market.id} market={market} index={index} />;
           }
           if (market.chartVariant === "arc") {
-            return <ProbabilityArcCard key={market.id} market={market} />;
+            return <ProbabilityArcCard key={market.id} market={market} index={index} />;
           }
-          return <MiniSparklineCard key={market.id} market={market} />;
+          return <MiniSparklineCard key={market.id} market={market} index={index} />;
         })}
       </motion.section>
     </AnimatePresence>

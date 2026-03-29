@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useTransform } from "framer-motion";
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "framer-motion";
 import { useEffect } from "react";
 
 interface AnimatedMetricProps {
@@ -7,6 +7,8 @@ interface AnimatedMetricProps {
   prefix?: string;
   decimals?: number;
   className?: string;
+  start?: boolean;
+  delay?: number;
 }
 
 export function AnimatedMetric({
@@ -15,19 +17,28 @@ export function AnimatedMetric({
   prefix = "",
   decimals = 0,
   className,
+  start = true,
+  delay = 0,
 }: AnimatedMetricProps) {
-  const motionValue = useMotionValue(value);
+  const prefersReducedMotion = useReducedMotion() ?? false;
+  const motionValue = useMotionValue(prefersReducedMotion ? value : 0);
   const rounded = useTransform(motionValue, (latest) =>
     `${prefix}${latest.toFixed(decimals)}${suffix}`,
   );
 
   useEffect(() => {
+    if (!start && !prefersReducedMotion) {
+      motionValue.set(0);
+      return;
+    }
+
     const controls = animate(motionValue, value, {
-      duration: 0.7,
-      ease: "easeOut",
+      duration: prefersReducedMotion ? 0 : 0.82,
+      delay: prefersReducedMotion ? 0 : delay,
+      ease: [0.22, 1, 0.36, 1],
     });
     return () => controls.stop();
-  }, [motionValue, value]);
+  }, [delay, motionValue, prefersReducedMotion, start, value]);
 
   return <motion.span className={className}>{rounded}</motion.span>;
 }
