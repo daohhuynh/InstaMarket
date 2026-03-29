@@ -1,51 +1,58 @@
-const path = require("path");
-const dotenv = require("dotenv");
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { Connection, PublicKey } = require("@solana/web3.js");
-
-dotenv.config();
-dotenv.config({
-  path: path.resolve(__dirname, ".env.local"),
-  override: false,
-});
-dotenv.config({
-  path: path.resolve(__dirname, "../.env.local"),
-  override: false,
-});
+const {
+  BedrockRuntimeClient,
+  ConverseCommand,
+} = require("@aws-sdk/client-bedrock-runtime");
+const personas = require("./personas.json");
 
 const app = express();
 app.use(cors()); // Crucial: Chrome Extensions will block requests without this
 app.use(express.json());
 
-const normalizeSupabaseUrl = (rawValue) => {
-  if (!rawValue) return null;
-  const value = rawValue.trim();
-  if (!value) return null;
-  if (/^https?:\/\//i.test(value)) return value;
-  if (/^[a-z0-9-]+$/i.test(value)) return `https://${value}.supabase.co`;
-  return null;
-};
-
-const supabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL);
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Missing Supabase configuration for integration_bridge.");
-  console.error("Set SUPABASE_URL and SUPABASE_ANON_KEY in integration_bridge/.env.");
-  console.error(
-    "SUPABASE_URL can be either https://<project>.supabase.co or just <project-ref>.",
-  );
-  process.exit(1);
-}
-
 // 1. Initialize Clients
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+);
 const solanaConnection = new Connection(
   process.env.SOLANA_RPC || "http://127.0.0.1:8899",
   "confirmed",
 );
+const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.AWS_REGION || "us-east-1",
+});
+
+const NOVA_LITE_TIMEOUT_MS = Number(process.env.NOVA_LITE_TIMEOUT_MS) || 45_000;
+let personaSimInFlight = false;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label}: timed out after ${ms}ms`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() =>
+    clearTimeout(timer),
+  );
+}
+
+function fallbackDecision(persona, reason) {
+  return {
+    id: persona.id,
+    name: persona.name,
+    type: persona.type,
+    decision: "NO",
+    shares: 5,
+    confidence: 50,
+    reasoning: reason || "Model call failed or timed out.",
+  };
+}
 
 // Helper: Generate fake keywords from titles so the Extension's tweet matcher works
 const generateKeywords = (title) => {
@@ -107,11 +114,15 @@ app.post("/api/save", async (req, res) => {
   try {
     const { walletAddress, marketId } = req.body;
 
-    const { data: user } = await supabase
+    const { data: user, error: userErr } = await supabase
       .from("users")
       .select("id")
       .eq("sol_wallet_address", walletAddress)
       .single();
+
+    if (userErr || !user) {
+      return res.status(404).json({ error: "User wallet not registered" });
+    }
 
     const { error } = await supabase.from("saved_markets_timeseries").insert([
       {
@@ -193,77 +204,69 @@ Tweet that triggered it: "${tweetText}"
 Market question: "${market.question}"
 Current market odds: YES ${market.yesOdds}% | NO ${market.noOdds}%
 
-Based purely on your personality and how you think, make ONE trading decision. Use the record_decision tool to submit it.`;
+Based purely on your personality and how you think, make ONE trading decision.
+Respond in exactly this format with no extra text:
+DECISION: YES or NO
+SHARES: (integer between 1 and 50, sized to your risk tolerance and conviction)
+CONFIDENCE: (integer 1-100, how confident you are)
+REASONING: (one sentence, in your voice)`;
 
   const command = new ConverseCommand({
     modelId: "amazon.nova-lite-v1:0",
     messages: [{ role: "user", content: [{ text: prompt }] }],
-    inferenceConfig: { maxTokens: 400, temperature: 0.85 },
-    toolConfig: {
-      tools: [
-        {
-          toolSpec: {
-            name: "record_decision",
-            description: "Records the persona's trading decision.",
-            inputSchema: {
-              json: {
-                type: "object",
-                properties: {
-                  decision: { type: "string", enum: ["YES", "NO"] },
-                  shares: { type: "integer", minimum: 1, maximum: 50 },
-                  confidence: { type: "integer", minimum: 1, maximum: 100 },
-                  reasoning: { type: "string" }
-                },
-                required: ["decision", "shares", "confidence", "reasoning"]
-              }
-            }
-          }
-        }
-      ],
-      // This strict instruction forces Bedrock to use the tool
-      toolChoice: { tool: { name: "record_decision" } } 
-    }
+    inferenceConfig: { maxTokens: 120, temperature: 0.85 },
   });
 
   const response = await bedrockClient.send(command);
-  
-  // Extract the JSON tool use from the Bedrock response
-  const toolBlock = response.output.message.content.find(c => c.toolUse);
-  
-  if (toolBlock && toolBlock.toolUse) {
-    const result = toolBlock.toolUse.input;
+  const text = response.output.message.content[0].text;
+  return parseNovaResponse(text, persona);
+}
+
+function parseNovaResponse(text, persona) {
+  try {
+    const decision =
+      text.match(/DECISION:\s*(YES|NO)/i)?.[1]?.toUpperCase() || "NO";
+    const shares = Math.min(
+      50,
+      Math.max(1, parseInt(text.match(/SHARES:\s*(\d+)/i)?.[1]) || 5),
+    );
+    const confidence = Math.min(
+      100,
+      Math.max(1, parseInt(text.match(/CONFIDENCE:\s*(\d+)/i)?.[1]) || 50),
+    );
+    const reasoning =
+      text.match(/REASONING:\s*(.+)/i)?.[1]?.trim() || "No reasoning provided.";
     return {
       id: persona.id,
       name: persona.name,
       type: persona.type,
-      // Fallbacks just in case the LLM ignores the bounds
-      decision: result.decision === "YES" ? "YES" : "NO",
-      shares: Math.min(50, Math.max(1, result.shares || 5)),
-      confidence: Math.min(100, Math.max(1, result.confidence || 50)),
-      reasoning: result.reasoning || "Used intuition.",
+      decision,
+      shares,
+      confidence,
+      reasoning,
+    };
+  } catch {
+    return {
+      id: persona.id,
+      name: persona.name,
+      type: persona.type,
+      decision: "NO",
+      shares: 5,
+      confidence: 50,
+      reasoning: "Could not parse response.",
     };
   }
-  
-  throw new Error("LLM failed to use the required JSON tool.");
 }
 
-async function submitToCLOB(decisions, rawMarketId) {
-  // FIX 2: Validate before hitting the C++ engine
-  const marketId = parseMarketId(rawMarketId);
-  if (!marketId) {
-    console.warn("[persona-sim] Invalid market ID, skipping CLOB submission");
-    return;
-  }
-
+async function submitToCLOB(decisions) {
   await Promise.allSettled(
     decisions.map((d) =>
       fetch("http://localhost:8080/api/paper-trades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          market_id: marketId,
           persona_id: d.id,
-          side: d.decision === "YES" ? 0 : 1, 
+          side: d.decision === "YES" ? 1 : 0,
           price: d.decision === "YES" ? d.confidence : 100 - d.confidence,
           quantity: d.shares,
         }),
@@ -273,24 +276,23 @@ async function submitToCLOB(decisions, rawMarketId) {
 }
 
 // --- ENDPOINT: /api/persona-sim ---
+// Runs one Nova Lite call per persona (10 total) per request; parallel with per-call timeouts.
 app.post("/api/persona-sim", async (req, res) => {
-  const { tweetText, market } = req.body;
-  
-  if (!tweetText || !market || !market.id) {
-    return res.status(400).json({ error: "tweetText and valid market object are required" });
-  }
-
-  // FIX 1: Lock only the specific market being simulated
-  if (activeSims.has(market.id)) {
+  if (personaSimInFlight) {
     return res.status(409).json({
-      error: "A simulation is already running for this market.",
+      error: "A simulation is already running. Wait for it to finish before starting another.",
     });
   }
-  
-  activeSims.add(market.id);
-  
+  personaSimInFlight = true;
   try {
-    // Parallel Bedrock calls for 10 personas
+    const { tweetText, market } = req.body;
+    if (!tweetText || !market) {
+      return res
+        .status(400)
+        .json({ error: "tweetText and market are required" });
+    }
+
+    // Exactly one Bedrock call per persona; failures do not cancel sibling calls
     const settled = await Promise.allSettled(
       personas.map((persona) =>
         withTimeout(
@@ -306,81 +308,56 @@ app.post("/api/persona-sim", async (req, res) => {
       if (result.status === "fulfilled") {
         return result.value;
       }
-      console.warn(`[persona-sim] ${persona.id} failed:`, result.reason?.message);
-      return fallbackDecision(persona, result.reason?.message);
+      console.warn(
+        `[persona-sim] ${persona.id} (${persona.name}):`,
+        result.reason?.message || result.reason,
+      );
+      return fallbackDecision(
+        persona,
+        result.reason?.message
+          ? `Error: ${result.reason.message}`
+          : "Model call failed or timed out.",
+      );
     });
 
-    // Forward the AI decisions to your C++ Engine
-    submitToCLOB(decisions, market.id).catch((err) =>
+    // Submit all orders to the C++ CLOB (non-blocking — don't fail if CLOB is down)
+    submitToCLOB(decisions).catch((err) =>
       console.warn("[persona-sim] CLOB submission failed:", err.message),
     );
 
-    // Aggregate stats for the Extension UI
+    // Aggregate results
     const yesAgents = decisions.filter((d) => d.decision === "YES");
     const noAgents = decisions.filter((d) => d.decision === "NO");
-    const simulatedYesPct = Math.round((yesAgents.length / decisions.length) * 100);
+    const simulatedYesPct = Math.round(
+      (yesAgents.length / decisions.length) * 100,
+    );
+    const simulatedNoPct = 100 - simulatedYesPct;
     const edge = simulatedYesPct - (market.yesOdds || 50);
+    const edgeVsMarket = `${edge >= 0 ? "+" : ""}${edge}% YES vs current odds`;
+
+    const topYes = [...yesAgents]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 3);
+    const topNo = [...noAgents]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 3);
 
     res.json({
       totalAgents: decisions.length,
       simulatedYesPct,
-      simulatedNoPct: 100 - simulatedYesPct,
+      simulatedNoPct,
       realYesPct: market.yesOdds || 50,
       realNoPct: market.noOdds || 50,
-      edgeVsMarket: `${edge >= 0 ? "+" : ""}${edge}% YES bias`,
+      edgeVsMarket,
       decisions,
-      topYes: [...yesAgents].sort((a, b) => b.confidence - a.confidence).slice(0, 3),
-      topNo: [...noAgents].sort((a, b) => b.confidence - a.confidence).slice(0, 3),
+      topYes,
+      topNo,
     });
   } catch (err) {
     console.error("[persona-sim] failed:", err);
     res.status(500).json({ error: "Simulation failed", detail: err.message });
   } finally {
-    activeSims.delete(market.id);
-  }
-});
-
-app.post("/api/resolve-market", async (req, res) => {
-  const { marketId, winningSide } = req.body; // winningSide is "YES" or "NO"
-
-  try {
-    // 1. Tell the C++ Engine to freeze the book and resolve
-    await fetch("http://localhost:8080/api/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        market_id: parseMarketId(marketId), 
-        winning_side: winningSide === "YES" ? 0 : 1 
-      })
-    });
-
-    // 2. Update the Human's Portfolio in Supabase
-    const { data: positions } = await supabase
-      .from("positions")
-      .select("*")
-      .eq("market_id", parseMarketId(marketId));
-
-    let totalPayout = 0;
-    
-    if (positions) {
-      for (const pos of positions) {
-        // If they bet on the winning side, they get $1 per share.
-        if (pos.side === winningSide) {
-           totalPayout += (pos.shares * 1.00); 
-        }
-      }
-    }
-
-    // (Optional) Update human's USDC balance in DB or via Solana here
-
-    res.json({ 
-      success: true, 
-      message: `Market ${marketId} resolved to ${winningSide}.`,
-      human_payout: totalPayout
-    });
-  } catch (err) {
-    console.error("Failed to resolve market:", err);
-    res.status(500).json({ error: "Resolution failed" });
+    personaSimInFlight = false;
   }
 });
 
