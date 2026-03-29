@@ -266,7 +266,6 @@
       <div class="im-market-shell">
         <div class="im-market-header">
           <span class="im-market-question">${safeQuestion}</span>
-          <span class="im-match-confidence">${match.confidence}% ${match.source === 'aws-bedrock' ? 'AI' : 'parser'} match</span>
         </div>
         <div class="im-probability-panel">
           <div class="im-probability-meta-row">
@@ -615,4 +614,3 @@
   }
 
 })();
-

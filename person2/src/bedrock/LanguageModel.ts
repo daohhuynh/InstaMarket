@@ -1,18 +1,7 @@
 export type JsonInputContentBlock =
-  | {
-      type: "text";
-      text: string;
-    }
-  | {
-      type: "image";
-      format: "gif" | "jpeg" | "png" | "webp";
-      bytes: Uint8Array;
-    }
-  | {
-      type: "video";
-      format: "flv" | "mkv" | "mov" | "mp4" | "mpeg" | "mpg" | "three_gp" | "webm" | "wmv";
-      bytes: Uint8Array;
-    };
+  | { type: "text"; text: string }
+  | { type: "image"; format: "gif" | "jpeg" | "png" | "webp"; bytes: Uint8Array }
+  | { type: "video"; format: "flv" | "mkv" | "mov" | "mp4" | "mpeg" | "mpg" | "three_gp" | "webm" | "wmv"; bytes: Uint8Array };
 
 export interface JsonGenerationRequest {
   system_prompt: string;

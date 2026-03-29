@@ -55,7 +55,6 @@ export class BedrockNovaLiteModel implements LanguageModel {
     blocks.push({
       text: `${request.user_prompt}\n\nReturn valid JSON only. Match this shape:\n${request.json_schema_hint}`,
     } as ContentBlock);
-
     return blocks;
   }
 
