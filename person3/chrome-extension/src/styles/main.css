@@ -1302,30 +1302,3 @@
     border-radius: 4px;
     border-left: 2px solid var(--pm-yellow);
 }
-
-#im-ditto-btn {
-    all: unset !important;
-    position: fixed !important;
-    z-index: 99999 !important;
-    cursor: pointer !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: transparent !important;
-    background-color: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    transition: transform 0.2s ease !important;
-}
-
-#im-ditto-btn:hover {
-    transform: scale(1.2) !important;
-}
-
-#im-ditto-btn img {
-    width: 80% !important; /* Slightly smaller than the 56px container for breathing room */
-    height: 80% !important;
-    image-rendering: pixelated !important;
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3)) !important;
-}
