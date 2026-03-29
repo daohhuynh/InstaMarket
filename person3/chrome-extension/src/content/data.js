@@ -575,43 +575,22 @@ async function loadPolymarketMarketUniverse(options = {}) {
   const pageSize = clampNumber(Number(options.pageSize) || 500, 200, 500);
   const maxPages = clampNumber(Number(options.maxPages) || 6, 1, 24);
 
-  const aggregated = [];
-  for (let page = 0; page < maxPages && aggregated.length < targetLimit; page += 1) {
+  const fetchPromises = Array.from({ length: maxPages }).map((_, page) => {
     const offset = page * pageSize;
-    const endpoint =
-      `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false` +
-      `&limit=${Math.round(pageSize)}&offset=${Math.round(offset)}&order=volumeNum&ascending=false`;
+    const endpoint = `${POLYMARKET_MARKETS_ENDPOINT}?active=true&closed=false&limit=${pageSize}&offset=${offset}`;
+    return fetch(endpoint).then(res => res.json()).catch(() => []);
+  });
 
-    const payload = await fetchJsonWithExtensionSupport(endpoint, {
-      method: "GET",
-      timeoutMs: 10000
-    });
-    if (!Array.isArray(payload)) {
-      throw new Error("Polymarket payload is not an array.");
-    }
-
-    if (payload.length === 0) {
-      break;
-    }
-
-    aggregated.push(...payload);
-    if (payload.length < pageSize) {
-      break;
-    }
+  const results = await Promise.all(fetchPromises);
+  
+  let aggregated = results.flat();
+  
+  if (aggregated.length > targetLimit) {
+      aggregated = aggregated.slice(0, targetLimit);
   }
 
-  const dedupedRaw = dedupeMarketsById(aggregated);
-  const mapped = dedupedRaw
-    .map(mapPolymarketMarket)
-    .filter(Boolean)
-    .slice(0, targetLimit);
-
-  if (mapped.length < MIN_MARKETS_REQUIRED) {
-    throw new Error("Polymarket returned too few markets.");
-  }
-
-  setMarketUniverse(mapped);
-  return { source: "polymarket", count: mapped.length };
+  setMarketUniverse(aggregated);
+  return { count: aggregated.length };
 }
 
 async function warmExpandedMarketUniverse(options = {}) {

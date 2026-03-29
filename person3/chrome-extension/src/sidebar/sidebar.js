@@ -192,18 +192,17 @@ function resolvePrimaryMarket(markets, activeMarketId) {
 
 function buildRelatedMarkets(primary, markets) {
   if (!primary || !Array.isArray(markets)) return [];
-
-  if (
-    Array.isArray(primary.relatedMarkets) &&
-    primary.relatedMarkets.length > 0
-  ) {
+  
+  // 1. Fast path: Direct relations (Replaced the "..." with the actual mapping logic)
+  if (Array.isArray(primary.relatedMarkets) && primary.relatedMarkets.length > 0) { 
     const byId = new Map(markets.map((market) => [String(market.id), market]));
     return primary.relatedMarkets
       .map((id) => byId.get(String(id)))
       .filter(Boolean)
       .slice(0, 4);
   }
-
+  
+  // 2. Fast path: Same category fallback
   const sameCategory = markets.filter(
     (market) =>
       market.id !== primary.id &&
@@ -211,22 +210,12 @@ function buildRelatedMarkets(primary, markets) {
       primary.category &&
       market.category === primary.category,
   );
+  
   if (sameCategory.length > 0) {
     return sameCategory.slice(0, 4);
   }
-
-  const lexical = markets
-    .filter((market) => market.id !== primary.id)
-    .map((market) => ({
-      market,
-      score: lexicalOverlap(primary.question, market.question),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 4)
-    .map((item) => item.market);
-
-  return lexical;
+  
+  return [];
 }
 
 function lexicalOverlap(leftText, rightText) {
