@@ -3041,7 +3041,7 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-async function runResearchThesisForTweet({ tweetText, market, postUrl, postAuthor, postTimestamp } = {}) {
+async function runResearchThesisForTweet({ tweetText, market, postUrl, postAuthor, postTimestamp, onProgress } = {}) {
   const endpoint = "http://localhost:8787/v1/research-thesis";
   const body = {
     tweet_text: typeof tweetText === "string" ? tweetText : "",
@@ -3060,14 +3060,45 @@ async function runResearchThesisForTweet({ tweetText, market, postUrl, postAutho
     post_timestamp: typeof postTimestamp === "string" ? postTimestamp : "",
   };
 
-  const response = await fetchJsonWithExtensionSupport(endpoint, {
+  // Use fetch directly for SSE streaming (CORS is open on the research server).
+  const fetchResponse = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    timeoutMs: 120000,
+    signal: AbortSignal.timeout(120000),
   });
 
-  return response;
+  if (!fetchResponse.ok || !fetchResponse.body) {
+    throw new Error(`Research endpoint returned ${fetchResponse.status}`);
+  }
+
+  const reader = fetchResponse.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      let parsed;
+      try {
+        parsed = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
+      if (parsed.type === "result") return parsed;
+      if (parsed.type === "error") throw new Error(parsed.error || "Research error");
+      if (typeof onProgress === "function") onProgress(parsed);
+    }
+  }
+
+  throw new Error("Research stream ended without a result");
 }
 
 if (typeof window !== "undefined") {

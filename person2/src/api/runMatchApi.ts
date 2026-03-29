@@ -1617,15 +1617,21 @@ async function main(): Promise<void> {
   });
 
   app.post("/v1/research-thesis", async (request: Request, response: Response) => {
+    response.setHeader("Content-Type", "text/event-stream");
+    response.setHeader("Cache-Control", "no-cache");
+    response.setHeader("Connection", "keep-alive");
+    response.flushHeaders();
+
+    const sendEvent = (data: object): void => {
+      response.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
       const body = request.body ?? {};
       validateThesisRequest(body);
 
-      const dossier = await buildResearchDossierFromScrapers(body);
-      const thesis = await thesisEngine.buildThesis({
-        request: body,
-        dossier,
-      });
+      const dossier = await buildResearchDossierFromScrapers(body, (event) => sendEvent(event));
+      const thesis = await thesisEngine.buildThesis({ request: body, dossier }, (event) => sendEvent(event));
 
       const topSources = [...dossier.sources]
         .sort((left, right) => right.relevance_score - left.relevance_score)
@@ -1679,10 +1685,12 @@ async function main(): Promise<void> {
         model_mode: model ? "bedrock" : "heuristic",
       };
 
-      response.json(payload);
+      sendEvent({ type: "result", ...payload });
+      response.end();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      response.status(400).json({ error: message });
+      sendEvent({ type: "error", error: message });
+      response.end();
     }
   });
 

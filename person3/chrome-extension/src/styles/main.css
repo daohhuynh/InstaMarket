@@ -878,6 +878,62 @@
   100% { transform: translateX(260%); }
 }
 
+/* ============================================
+   RESEARCH PROGRESS LOG
+   ============================================ */
+
+.im-research-log {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.im-research-log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.im-research-log-row.done {
+  color: var(--pm-text-secondary);
+}
+
+.im-research-log-row.active {
+  color: var(--pm-text);
+  font-weight: 500;
+}
+
+.im-research-log-icon {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--pm-green);
+  font-size: 11px;
+  margin-top: 1px;
+}
+
+.im-research-log-spinner {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border: 1.5px solid var(--pm-border);
+  border-top-color: var(--pm-blue);
+  border-radius: 50%;
+  animation: im-research-spin 0.7s linear infinite;
+}
+
+@keyframes im-research-spin {
+  to { transform: rotate(360deg); }
+}
+
+.im-research-log-text {
+  flex: 1;
+}
+
 .im-risk-row {
   display: flex;
   flex-direction: column;

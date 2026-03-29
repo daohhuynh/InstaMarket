@@ -515,13 +515,44 @@
     }
   }
 
+  function formatProgressStep(event) {
+    if (event.type === 'scraper_start') return event.message;
+    if (event.type === 'scraper_source') return event.message;
+    if (event.type === 'scraper_done') return event.message;
+    if (event.type === 'agent_start') return event.message;
+    if (event.type === 'agent_done') return null; // suppress — the _start already showed it
+    return null;
+  }
+
   async function runLiveResearch({ market, tweet, tweetText, fallbackResearchSummary }) {
     const context = extractTweetContext(tweet);
+    const completedSteps = [];
+    let currentStep = 'Initialising research pipeline...';
+
+    function pushStep(label) {
+      if (!label) return;
+      completedSteps.push(label);
+      persistResearch(market.id, {
+        type: 'thesis',
+        status: 'loading',
+        title: `Researching "${market.question}"`,
+        summary: currentStep,
+        completedSteps: [...completedSteps],
+        confidence: 0,
+        matchedTerms: [],
+        steps: []
+      });
+      if (typeof window.rerenderPortfolioTabIfVisible === 'function') {
+        window.rerenderPortfolioTabIfVisible();
+      }
+    }
+
     persistResearch(market.id, {
       type: 'thesis',
       status: 'loading',
-      title: `Running thesis engine for "${market.question}"...`,
-      summary: 'Scraping X/YouTube/Reddit/News/Google and running Bedrock analysts.',
+      title: `Researching "${market.question}"`,
+      summary: currentStep,
+      completedSteps: [],
       confidence: 0,
       matchedTerms: [],
       steps: []
@@ -538,7 +569,14 @@
       market,
       postUrl: context.postUrl,
       postAuthor: context.postAuthor,
-      postTimestamp: context.postTimestamp
+      postTimestamp: context.postTimestamp,
+      onProgress: (event) => {
+        if (event.type === 'agent_start') {
+          currentStep = event.message;
+        }
+        const label = formatProgressStep(event);
+        if (label) pushStep(label);
+      }
     });
 
     if (!response || typeof response !== 'object' || !response.thesis) {

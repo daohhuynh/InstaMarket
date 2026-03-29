@@ -21,14 +21,19 @@ interface AnalystResponse {
   bullets: string[];
 }
 
+export type ThesisProgressEvent =
+  | { type: "agent_start"; agent: string; message: string }
+  | { type: "agent_done"; agent: string; message: string };
+
 export class ThesisEngine {
   constructor(private readonly model: LanguageModel) {}
 
-  async buildThesis(input: ThesisBuildInput): Promise<ThesisJson> {
+  async buildThesis(input: ThesisBuildInput, onEvent?: (event: ThesisProgressEvent) => void): Promise<ThesisJson> {
     const skills = await loadAnalystSkills();
     const marketBlock = buildMarketBlock(input.request);
     const dossierBlock = formatResearchDossierForPrompt(input.dossier, 8);
 
+    onEvent?.({ type: "agent_start", agent: "Market Analyst", message: "Analysing market structure & fair pricing..." });
     const marketAnalyst = await this.runAnalyst({
       role: "Market Analyst",
       skill: skills.market_analyst,
@@ -37,7 +42,9 @@ export class ThesisEngine {
       request: input.request,
       task: "Estimate fair pricing versus live odds and identify market structure signals.",
     });
+    onEvent?.({ type: "agent_done", agent: "Market Analyst", message: "Market Analyst complete" });
 
+    onEvent?.({ type: "agent_start", agent: "Evidence Analyst", message: "Weighing supporting & contradicting evidence..." });
     const evidenceAnalyst = await this.runAnalyst({
       role: "Evidence Analyst",
       skill: skills.evidence_analyst,
@@ -46,7 +53,9 @@ export class ThesisEngine {
       request: input.request,
       task: "Extract strongest externally supported evidence and contradictory evidence.",
     });
+    onEvent?.({ type: "agent_done", agent: "Evidence Analyst", message: "Evidence Analyst complete" });
 
+    onEvent?.({ type: "agent_start", agent: "Resolution Analyst", message: "Checking resolution criteria & edge cases..." });
     const resolutionAnalyst = await this.runAnalyst({
       role: "Resolution Analyst",
       skill: skills.resolution_analyst,
@@ -55,7 +64,9 @@ export class ThesisEngine {
       request: input.request,
       task: "Focus on resolution criteria, ambiguity, and disqualifying scenarios.",
     });
+    onEvent?.({ type: "agent_done", agent: "Resolution Analyst", message: "Resolution Analyst complete" });
 
+    onEvent?.({ type: "agent_start", agent: "PM Synthesizer", message: "Synthesising final thesis & position sizing..." });
     const synth = await this.generateJsonWithRetry<SynthesizedThesisResponse>({
       system_prompt: [
         "You are PM Synthesizer, a professional prediction-market portfolio manager.",
@@ -79,6 +90,8 @@ export class ThesisEngine {
       temperature: 0.15,
       max_tokens: 360,
     });
+
+    onEvent?.({ type: "agent_done", agent: "PM Synthesizer", message: "Thesis synthesised" });
 
     return normalizeThesis(
       {

@@ -5,7 +5,25 @@ import type { ResearchDossier } from "../contracts/researchDossier.js";
 import { validateResearchDossier } from "../contracts/researchDossier.js";
 import type { ThesisRequest } from "./contracts.js";
 
-export async function buildResearchDossierFromScrapers(request: ThesisRequest): Promise<ResearchDossier> {
+export type ScraperProgressEvent =
+  | { type: "scraper_start"; message: string }
+  | { type: "scraper_source"; source: string; message: string }
+  | { type: "scraper_done"; message: string; source_counts: Record<string, number> };
+
+const SCRAPER_SOURCES = ["x", "youtube", "reddit", "news", "google", "tiktok"];
+const SOURCE_LABELS: Record<string, string> = {
+  x: "X / Twitter",
+  youtube: "YouTube",
+  reddit: "Reddit",
+  news: "News",
+  google: "Google",
+  tiktok: "TikTok",
+};
+
+export async function buildResearchDossierFromScrapers(
+  request: ThesisRequest,
+  onEvent?: (event: ScraperProgressEvent) => void,
+): Promise<ResearchDossier> {
   const outputDir = resolve(process.cwd(), "output");
   await mkdir(outputDir, { recursive: true });
 
@@ -26,17 +44,47 @@ export async function buildResearchDossierFromScrapers(request: ThesisRequest): 
 
   await writeFile(inputPath, JSON.stringify(scraperInput, null, 2) + "\n", "utf8");
 
+  onEvent?.({ type: "scraper_start", message: "Starting research pipeline..." });
+
+  // Emit per-source events spread across the expected scraper runtime so the
+  // UI shows realistic incremental progress while the Python process runs.
+  const sourceEventTimer = emitSourceEventsAsync(onEvent);
+
   try {
     await runScraperProcess(inputPath, outputPath);
+    sourceEventTimer.cancel();
     const raw = await readFile(outputPath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
     validateResearchDossier(parsed);
-    return parsed;
+    const dossier = parsed as ResearchDossier;
+    onEvent?.({
+      type: "scraper_done",
+      message: `Sources collected (${Object.values(dossier.source_counts).reduce((sum, n) => sum + n, 0)} results)`,
+      source_counts: dossier.source_counts,
+    });
+    return dossier;
   } catch (error) {
+    sourceEventTimer.cancel();
+    onEvent?.({ type: "scraper_done", message: "Scraper failed — using fallback sources", source_counts: {} });
     return buildFallbackDossier(request, error);
   } finally {
     await safeCleanup(inputPath);
   }
+}
+
+function emitSourceEventsAsync(onEvent?: (event: ScraperProgressEvent) => void): { cancel: () => void } {
+  if (!onEvent) return { cancel: () => {} };
+  let cancelled = false;
+  const delayMs = 6000; // spread source events over ~36s of scraper runtime
+  (async () => {
+    for (const source of SCRAPER_SOURCES) {
+      if (cancelled) break;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      if (cancelled) break;
+      onEvent({ type: "scraper_source", source, message: `Scraping ${SOURCE_LABELS[source] ?? source}...` });
+    }
+  })();
+  return { cancel: () => { cancelled = true; } };
 }
 
 async function runScraperProcess(inputPath: string, outputPath: string): Promise<void> {

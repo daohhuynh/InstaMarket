@@ -272,14 +272,23 @@ function renderResearchCard(research) {
 }
 
 function renderThesisLoadingCard(research) {
+  const completed = Array.isArray(research.completedSteps) ? research.completedSteps : [];
+  const current = research.summary || 'Working...';
+
   return `
     <div class="im-risk-panel">
       <div class="im-market-title">${escapeHtml(research.title || 'Running thesis engine...')}</div>
-      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        ${escapeHtml(research.summary || 'Collecting evidence and analyst views...')}
-      </div>
-      <div class="im-thesis-loading-bar">
-        <div class="im-thesis-loading-fill"></div>
+      <div class="im-research-log">
+        ${completed.map(step => `
+          <div class="im-research-log-row done">
+            <span class="im-research-log-icon">&#10003;</span>
+            <span class="im-research-log-text">${escapeHtml(step)}</span>
+          </div>
+        `).join('')}
+        <div class="im-research-log-row active">
+          <span class="im-research-log-spinner"></span>
+          <span class="im-research-log-text">${escapeHtml(current)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -1518,6 +1527,7 @@ function switchSidebarToSaved() {
 }
 
 window.setMarketResearch = setMarketResearch;
+window.rerenderPortfolioTabIfVisible = rerenderPortfolioTabIfVisible;
 window.switchSidebarToMarkets = switchSidebarToMarkets;
 window.switchSidebarToSaved = switchSidebarToSaved;
 window.saveMarketForLater = saveMarketForLater;
