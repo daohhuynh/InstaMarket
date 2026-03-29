@@ -90,6 +90,9 @@ function renderPortfolioTab() {
 
     <div class="im-section-header">Recent Bets</div>
     ${recent.map(renderBetRow).join('')}
+
+    <div class="im-section-header">Research</div>
+    ${renderPortfolioResearchSection()}
   `;
 }
 
@@ -146,16 +149,12 @@ function renderMarketsTab(activeMarketId) {
   }
 
   const related = buildRelatedMarkets(primary, markets);
-  const research = getMarketResearch(primary.id);
 
   return `
     ${renderMarketCard(primary, true)}
 
     <div class="im-section-header">Related Markets</div>
     ${related.length ? related.map(market => renderMarketCard(market, false)).join('') : renderEmptyPanel('No related markets', 'No nearby related market found for this topic.')}
-
-    <div class="im-section-header">Research</div>
-    ${research ? renderResearchCard(research) : renderResearchPlaceholder(primary)}
 
     <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
   `;
@@ -602,6 +601,34 @@ function renderResearchPlaceholder(primaryMarket) {
   `;
 }
 
+function renderPortfolioResearchSection() {
+  if (!IM_ACTIVE_MARKET_ID) {
+    return `
+      <div class="im-risk-panel">
+        <div class="im-market-title">No research yet</div>
+        <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
+          Click <strong>Research</strong> on a tweet card to load AI thesis and evidence here.
+        </div>
+      </div>
+    `;
+  }
+
+  const research = getMarketResearch(IM_ACTIVE_MARKET_ID);
+  if (!research) {
+    const market = typeof getMarketById === 'function' ? getMarketById(IM_ACTIVE_MARKET_ID) : null;
+    return market ? renderResearchPlaceholder(market) : `
+      <div class="im-risk-panel">
+        <div class="im-market-title">No research yet</div>
+        <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
+          Click <strong>Research</strong> on a tweet card to load AI thesis and evidence here.
+        </div>
+      </div>
+    `;
+  }
+
+  return renderResearchCard(research);
+}
+
 function renderMarketCard(market, isBest) {
   const marketLink = market.polymarketUrl
     ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
@@ -785,7 +812,7 @@ function bindSidebarEvents() {
         ...existing,
         showFullData: !existing.showFullData
       });
-      rerenderMarketsTab();
+      rerenderPortfolioTabIfVisible();
       return;
     }
 
