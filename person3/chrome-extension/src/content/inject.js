@@ -270,33 +270,404 @@
 
   function extractPrimaryTweetText(tweet) {
     if (!tweet) return '';
+    const authorText = [...tweet.querySelectorAll('[data-testid="User-Name"]')]
+      .slice(0, 1)
+      .map(node => sanitizeText(node.innerText || ''))
+      .filter(Boolean);
+    const outerText = [...tweet.querySelectorAll('[data-testid="tweetText"]')]
+      .filter(node => !isNodeWithinNestedTweet(node, tweet))
+      .map(node => sanitizeText(node.innerText || ''))
+      .filter(Boolean);
+    const quotedContextText = extractQuotedContextText(tweet);
+    const cardText = collectCardPreviewText(tweet, { includeNested: true })
+      .map(text => text.slice(0, 260));
 
-    const cloned = tweet.cloneNode(true);
+    const merged = [];
+    const seen = new Set();
+    const pushUnique = (value) => {
+      const compact = sanitizeText(value || '');
+      if (!compact) return;
+      if (seen.has(compact)) return;
+      seen.add(compact);
+      merged.push(compact);
+    };
 
-    // Remove nested quoted tweets; keep only the outer tweet text context.
-    cloned.querySelectorAll('article[data-testid="tweet"]').forEach(node => {
-      node.remove();
+    authorText.forEach(pushUnique);
+    // Prioritize quoted/card context first so critical entities (e.g. Claude in attached post)
+    // are retained even if the outer tweet body is long.
+    quotedContextText.slice(0, 2).forEach(pushUnique);
+    cardText.slice(0, 2).forEach(pushUnique);
+    outerText.slice(0, 2).forEach(pushUnique);
+
+    return normalizeExtractedTweetText(merged.join(' ').slice(0, 1600));
+  }
+
+  function normalizeExtractedTweetText(value) {
+    const compact = sanitizeText(value || '');
+    if (!compact) return '';
+    return sanitizeText(
+      compact
+        .replace(/\b\d+\s*(?:h|hr|hrs)\b/gi, ' ')
+        .replace(/\bview post analytics\b/gi, ' ')
+        .replace(/\bview analytics\b/gi, ' ')
+        .replace(/\b\d+\s*views?\.?\b/gi, ' ')
+        .replace(/\b\d+\s*hours?\s+ago\b/gi, ' ')
+        .replace(/\bshow more\b/gi, ' ')
+    );
+  }
+
+  function collectCardPreviewText(scope, options = {}) {
+    if (!scope) return [];
+    const includeNested = Boolean(options && options.includeNested);
+    const values = [];
+    const seen = new Set();
+    const push = (value) => {
+      const compact = sanitizeText(value || '');
+      if (!compact || seen.has(compact)) return;
+      // Ignore bare card labels that carry no semantic signal.
+      if (/^(x article|article|show more)$/i.test(compact)) return;
+      seen.add(compact);
+      values.push(compact);
+    };
+
+    const cardSelectors = [
+      '[data-testid="card.wrapper"]',
+      '[data-testid^="card.layout"]',
+      '[data-testid*="card.layoutLarge"]',
+      '[data-testid*="card.layoutSmall"]'
+    ].join(', ');
+
+    scope.querySelectorAll(cardSelectors).forEach(node => {
+      if (!includeNested && isNodeWithinNestedTweet(node, scope)) return;
+      push(node.innerText || node.textContent || '');
     });
 
-    // Remove rich card text and promoted/ad badges that pollute matching.
-    cloned.querySelectorAll('[data-testid="card.wrapper"], [aria-label="Ad"], [aria-label="Promoted"]').forEach(node => {
-      node.remove();
+    scope.querySelectorAll('a[aria-label], [role="link"][aria-label]').forEach(node => {
+      if (!includeNested && isNodeWithinNestedTweet(node, scope)) return;
+      push(node.getAttribute('aria-label') || '');
     });
 
-    const tweetTextNodes = [...cloned.querySelectorAll('[data-testid="tweetText"]')];
-    const primary = tweetTextNodes[0];
-    if (primary && typeof primary.innerText === 'string') {
-      return sanitizeText(primary.innerText);
-    }
+    scope.querySelectorAll('img[alt], video[aria-label], [data-testid="tweetText"], [dir="auto"]').forEach(node => {
+      if (!includeNested && isNodeWithinNestedTweet(node, scope)) return;
+      if (node instanceof HTMLImageElement) {
+        push(node.getAttribute('alt') || '');
+        return;
+      }
+      push(node.getAttribute?.('aria-label') || node.textContent || '');
+    });
 
-    const fallback = sanitizeText(cloned.innerText || '');
-    return fallback;
+    return values.slice(0, 6);
+  }
+
+  function extractQuotedContextText(tweet) {
+    if (!tweet) return [];
+    const quotedTweets = [...tweet.querySelectorAll('article[data-testid="tweet"]')]
+      .filter(node => node && node !== tweet)
+      .slice(0, 2);
+    const results = [];
+    const seen = new Set();
+    const push = (value) => {
+      const compact = sanitizeText(value || '');
+      if (!compact || seen.has(compact)) return;
+      if (/^(show more|x article|article)$/i.test(compact)) return;
+      seen.add(compact);
+      results.push(compact);
+    };
+
+    quotedTweets.forEach(quoted => {
+      const richParts = [];
+      const quotedAuthor = [...quoted.querySelectorAll('[data-testid="User-Name"]')]
+        .slice(0, 1)
+        .map(node => sanitizeText(node.innerText || ''))
+        .filter(Boolean);
+      richParts.push(...quotedAuthor);
+
+      const quotedTweetText = [...quoted.querySelectorAll('[data-testid="tweetText"]')]
+        .map(node => sanitizeText(node.innerText || ''))
+        .filter(Boolean);
+      richParts.push(...quotedTweetText);
+
+      richParts.push(...collectCardPreviewText(quoted, { includeNested: true }));
+      richParts
+        .map(part => sanitizeText(part))
+        .filter(Boolean)
+        .forEach(push);
+
+      // Fallback: include compact quoted innerText when rich selectors are sparse.
+      if (richParts.length <= 1) {
+        push(String(quoted.innerText || '').slice(0, 420));
+      }
+    });
+
+    return results.slice(0, 6);
   }
 
   function sanitizeText(value) {
     return String(value || '')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  function upgradeTwitterMediaUrlForVision(value) {
+    const normalized = normalizeMediaUrl(value);
+    if (!normalized) return '';
+    try {
+      const parsed = new URL(normalized);
+      const host = String(parsed.hostname || '').toLowerCase();
+      const path = String(parsed.pathname || '').toLowerCase();
+      if (!host.endsWith('pbs.twimg.com')) return parsed.toString();
+
+      if (path.includes('/media/')) {
+        parsed.searchParams.set('name', 'orig');
+      } else if (
+        path.includes('/ext_tw_video_thumb/') ||
+        path.includes('/amplify_video_thumb/') ||
+        path.includes('/tweet_video_thumb/')
+      ) {
+        parsed.searchParams.set('name', 'large');
+      }
+      return parsed.toString();
+    } catch {
+      return normalized;
+    }
+  }
+
+  function normalizeMediaUrl(value) {
+    if (!value) return '';
+    try {
+      const parsed = new URL(String(value), window.location.href);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.toString();
+    } catch {
+      return '';
+    }
+  }
+
+  function isNodeWithinNestedTweet(node, rootTweet) {
+    if (!node || !rootTweet) return false;
+    const nestedTweet = node.closest('article[data-testid="tweet"]');
+    return Boolean(nestedTweet && nestedTweet !== rootTweet);
+  }
+
+  function extractStyleBackgroundUrl(styleValue) {
+    if (!styleValue || typeof styleValue !== 'string') return '';
+    const match = styleValue.match(/url\((['"]?)(.*?)\1\)/i);
+    return match && match[2] ? match[2] : '';
+  }
+
+  function extractPreferredSrcFromSrcset(srcsetValue) {
+    if (!srcsetValue || typeof srcsetValue !== 'string') return '';
+    const candidates = srcsetValue
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => part.split(/\s+/)[0])
+      .filter(Boolean);
+    if (candidates.length === 0) return '';
+    return candidates[candidates.length - 1];
+  }
+
+  function tweetLikelyHasMedia(tweet) {
+    if (!tweet) return false;
+    return Boolean(
+      tweet.querySelector(
+        [
+          'div[data-testid="tweetPhoto"]',
+          '[data-testid="videoPlayer"]',
+          '[data-testid="videoComponent"]',
+          'a[href*="/photo/"]',
+          'a[href*="/video/"]',
+          'img[src*="pbs.twimg.com/"]',
+          'img[srcset*="pbs.twimg.com/"]',
+          '[style*="pbs.twimg.com/"]'
+        ].join(', ')
+      )
+    );
+  }
+
+  function tweetLikelyHasDeferredTextContext(tweet) {
+    if (!tweet) return false;
+    return Boolean(
+      tweet.querySelector('article[data-testid="tweet"]') ||
+      tweet.querySelector('[data-testid="card.wrapper"]') ||
+      tweet.querySelector('[data-testid^="card.layout"]')
+    );
+  }
+
+  function scoreTweetTextQuality(text) {
+    const normalized = sanitizeText(text || '').toLowerCase();
+    if (!normalized) return 0;
+    let score = normalized.length;
+    if (/\b(claude|anthropic|openai|unitree|optimus|robot|humanoid|bitcoin|stacks)\b/.test(normalized)) {
+      score += 200;
+    }
+    if (/\bview post analytics\b/.test(normalized)) {
+      score -= 120;
+    }
+    if (/\bshow more\b/.test(normalized)) {
+      score -= 40;
+    }
+    return score;
+  }
+
+  async function resolveTweetTextContext(tweet) {
+    let best = extractPrimaryTweetText(tweet);
+    const shouldProbe =
+      tweetLikelyHasDeferredTextContext(tweet) ||
+      /\bshow more\b/i.test(best) ||
+      best.length < 180;
+    const attempts = shouldProbe ? 4 : 2;
+    const probeDelayMs = shouldProbe ? 45 : 25;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, probeDelayMs));
+      const next = extractPrimaryTweetText(tweet);
+      if (scoreTweetTextQuality(next) > scoreTweetTextQuality(best)) {
+        best = next;
+      }
+      if (scoreTweetTextQuality(best) >= 380 && !/\bshow more\b/i.test(best)) {
+        break;
+      }
+    }
+
+    return best;
+  }
+
+  function extractTweetMediaContext(tweet, options = {}) {
+    if (!tweet) return [];
+    const includeNested = Boolean(options && options.includeNested);
+
+    const assets = [];
+    const seen = new Set();
+    const pushAsset = (asset) => {
+      const type = asset?.type === 'video' ? 'video' : asset?.type === 'image' ? 'image' : '';
+      if (!type) return;
+
+      const normalized = {
+        type,
+        url: upgradeTwitterMediaUrlForVision(asset.url || ''),
+        poster_url: upgradeTwitterMediaUrlForVision(asset.poster_url || ''),
+        alt_text: sanitizeText(asset.alt_text || '').slice(0, 160)
+      };
+      if (!normalized.url && !normalized.poster_url && !normalized.alt_text) return;
+
+      const key = `${normalized.type}|${normalized.url}|${normalized.poster_url}|${normalized.alt_text}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      assets.push(normalized);
+    };
+
+    tweet.querySelectorAll(
+      [
+        'div[data-testid="tweetPhoto"] img',
+        'img[src*="pbs.twimg.com/media/"]',
+        'img[src*="pbs.twimg.com/ext_tw_video_thumb/"]',
+        'img[src*="pbs.twimg.com/amplify_video_thumb/"]',
+        'img[src*="pbs.twimg.com/tweet_video_thumb/"]',
+        'img[src*="pbs.twimg.com/card_img/"]'
+      ].join(', ')
+    ).forEach(img => {
+      if (!includeNested && isNodeWithinNestedTweet(img, tweet)) return;
+
+      const src = normalizeMediaUrl(
+        img.currentSrc ||
+        img.getAttribute('src') ||
+        extractPreferredSrcFromSrcset(img.getAttribute('srcset') || '')
+      );
+      const directAlt = sanitizeText(img.getAttribute('alt') || '');
+      const contextualAlt = sanitizeText(
+        img.closest('[data-testid="card.wrapper"], [data-testid^="card.layout"], article[data-testid="tweet"]')?.innerText || ''
+      ).slice(0, 160);
+      const alt = directAlt || contextualAlt;
+      if (!src) return;
+      if (/profile_images/i.test(src)) return;
+      if (/profile_banners/i.test(src)) return;
+      if (/\/emoji\//i.test(src)) return;
+      if (/^(image|photo|gif)$/i.test(alt)) {
+        pushAsset({ type: 'image', url: src });
+        return;
+      }
+      pushAsset({ type: 'image', url: src, alt_text: alt });
+    });
+
+    tweet.querySelectorAll('[data-testid="videoPlayer"] video, [data-testid="videoComponent"] video, video').forEach(video => {
+      if (!includeNested && isNodeWithinNestedTweet(video, tweet)) return;
+      const src = normalizeMediaUrl(video.currentSrc || video.src || video.getAttribute('src') || '');
+      const poster = normalizeMediaUrl(video.getAttribute('poster') || '');
+      if (/profile_images|profile_banners/i.test(src) || /profile_images|profile_banners/i.test(poster)) return;
+      const label = sanitizeText(video.getAttribute('aria-label') || '');
+      pushAsset({
+        type: 'video',
+        url: src,
+        poster_url: poster,
+        alt_text: label
+      });
+    });
+
+    tweet.querySelectorAll('a[href*="/video/"], a[href*="ext_tw_video_thumb"], a[href*="amplify_video_thumb"]').forEach(anchor => {
+      if (!includeNested && isNodeWithinNestedTweet(anchor, tweet)) return;
+      const href = normalizeMediaUrl(anchor.getAttribute('href') || anchor.href || '');
+      const label = sanitizeText(anchor.getAttribute('aria-label') || anchor.textContent || '');
+      const poster = normalizeMediaUrl(
+        anchor.querySelector('img')?.currentSrc ||
+        anchor.querySelector('img')?.getAttribute('src') ||
+        extractPreferredSrcFromSrcset(anchor.querySelector('img')?.getAttribute('srcset') || '')
+      );
+      if (!href) return;
+      pushAsset({
+        type: 'video',
+        url: href,
+        poster_url: poster,
+        alt_text: label
+      });
+    });
+
+    tweet.querySelectorAll('[style*="pbs.twimg.com/"]').forEach(node => {
+      if (!includeNested && isNodeWithinNestedTweet(node, tweet)) return;
+      const inlineStyle = String(node.getAttribute('style') || '');
+      const bgUrl = normalizeMediaUrl(extractStyleBackgroundUrl(inlineStyle));
+      if (!bgUrl) return;
+      if (/profile_images|profile_banners/i.test(bgUrl)) return;
+      if (/ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb/i.test(bgUrl)) {
+        pushAsset({ type: 'video', poster_url: bgUrl });
+      } else {
+        pushAsset({ type: 'image', url: bgUrl });
+      }
+    });
+
+    // Some media gets attached via computed styles after hydration.
+    tweet.querySelectorAll('div, span').forEach(node => {
+      if (!includeNested && isNodeWithinNestedTweet(node, tweet)) return;
+      const computedStyle = window.getComputedStyle(node);
+      const bg = extractStyleBackgroundUrl(computedStyle.backgroundImage || '');
+      const bgUrl = normalizeMediaUrl(bg);
+      if (!bgUrl || !/pbs\.twimg\.com/i.test(bgUrl)) return;
+      if (/profile_images|profile_banners/i.test(bgUrl) || /\/emoji\//i.test(bgUrl)) return;
+      if (/ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb/i.test(bgUrl)) {
+        pushAsset({ type: 'video', poster_url: bgUrl });
+      } else {
+        pushAsset({ type: 'image', url: bgUrl });
+      }
+    });
+
+    return assets.slice(0, 8);
+  }
+
+  async function resolveTweetMediaContext(tweet) {
+    let assets = extractTweetMediaContext(tweet);
+    if (assets.length > 0) return assets;
+    if (!tweetLikelyHasMedia(tweet)) return assets;
+
+    const attempts = 6;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 90));
+      assets = extractTweetMediaContext(tweet);
+      if (assets.length > 0) {
+        return assets;
+      }
+    }
+    // If outer tweet media isn't ready/available, include quoted tweet/card media as fallback context.
+    assets = extractTweetMediaContext(tweet, { includeNested: true });
+    return assets;
   }
 
   async function injectTweetLayer(tweet) {
@@ -306,28 +677,49 @@
     tweet.setAttribute('data-im-processing', 'true');
 
     try {
-      if (isLikelyPromotedTweet(tweet)) {
-        tweet.setAttribute('data-im-injected', 'true');
-        return;
-      }
-
-      const tweetText = extractPrimaryTweetText(tweet);
+      const tweetText = await resolveTweetTextContext(tweet);
       if (!tweetText || tweetText.length < 10) {
         tweet.setAttribute('data-im-injected', 'true');
         return;
       }
-      const match = await findBestMarketForTweetWithAi(tweetText);
+      const mediaContext = await resolveTweetMediaContext(tweet);
+      const match = await findBestMarketForTweetWithAi(tweetText, mediaContext);
+      if (typeof console.debug === 'function' && typeof getTweetSearchDebug === 'function') {
+        const debugInfo = getTweetSearchDebug(tweetText);
+        if (debugInfo) {
+          console.debug('[InstaMarket] Match decision:', {
+            tweet: tweetText.slice(0, 120),
+            matched: Boolean(match),
+            confidence: match?.confidence ?? 0,
+            market: match?.market?.question?.slice(0, 80) ?? null,
+            source: match?.source ?? null,
+            ...debugInfo
+          });
+        }
+      }
       if (!match) {
-        tweet.setAttribute('data-im-injected', 'nomatch');
-        setTimeout(() => {
-          if (tweet.getAttribute('data-im-injected') === 'nomatch') {
-            tweet.removeAttribute('data-im-injected');
-          }
-        }, marketUniverseHydrated ? 12000 : 2500);
+        const retryCount = Number(tweet.getAttribute('data-im-retries') || '0');
+        const hasDeferredSignal = mediaContext.length === 0 && (
+          tweetLikelyHasMedia(tweet) ||
+          Boolean(tweet.querySelector('article[data-testid="tweet"]')) ||
+          Boolean(tweet.querySelector('[data-testid="card.wrapper"]'))
+        );
+
+        if (!marketUniverseHydrated || (hasDeferredSignal && retryCount < 1)) {
+          tweet.setAttribute('data-im-retries', String(retryCount + 1));
+          tweet.setAttribute('data-im-injected', 'nomatch');
+          setTimeout(() => {
+            if (tweet.getAttribute('data-im-injected') === 'nomatch') {
+              tweet.removeAttribute('data-im-injected');
+            }
+          }, marketUniverseHydrated ? 4000 : 2500);
+        } else {
+          tweet.setAttribute('data-im-injected', 'true');
+        }
         return;
       }
       const market = match.market;
-      const researchSummary = buildResearchSummary(tweetText, match);
+      const researchSummary = buildResearchSummary(tweetText, match, mediaContext);
       persistResearch(market.id, researchSummary);
       const safeQuestion = escapeHtml(market.question);
       const safeVolume = escapeHtml(market.volume || '$0 Vol');

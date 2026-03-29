@@ -81,6 +81,16 @@ Endpoint:
 - `POST /v1/extract-market-query` (optional query enhancer for better Polymarket search terms)
 - Default URL: `http://localhost:8787/v1/match-market`
 
+Debug logs (enabled by default with `AI_MATCH_DEBUG_LOG=true`) print:
+- tweet context snippet
+- input parser/public-search queries
+- AI query output terms
+- top candidate markets and final match decision
+
+Multimodal assist:
+- If a tweet has images/videos, the extension sends media metadata to `match-api`.
+- With `AI_MATCH_ENABLE_MEDIA=true`, the API tries to attach a small number of media blocks to Bedrock Nova Lite for better context-aware matching.
+
 Example:
 
 ```bash
