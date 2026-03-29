@@ -73,65 +73,51 @@
   }
 
   function alignDittoToTwitterButtons() {
-    const btn = document.getElementById("im-ditto-btn");
+      const btn = document.getElementById('im-ditto-btn');
+      const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
+      const chatEl = document.querySelector('[data-testid="DMDrawer"]') ||
+                     document.querySelector('[data-testid="FloatingActionButtons"] a[href*="messages"]')?.closest('[style]');
 
-    const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
+      if (!btn || !grokEl) return;
 
-    if (!btn || !grokEl) return;
+      const grokRect = grokEl.getBoundingClientRect();
+      const btnSize = grokRect.width; // Match Grok size exactly (56px)
 
-    const grokRect = grokEl.getBoundingClientRect();
+      // Calculate Twitter's native gap (usually 16px)
+      let gap = 16;
+      if (chatEl) {
+        const chatRect = chatEl.getBoundingClientRect();
+        gap = Math.abs(chatRect.top - grokRect.bottom);
+      }
 
-    const btnSize = 56; // Standard size of Grok/Chat buttons
+      // Position perfectly above Grok
+      btn.style.left = grokRect.left + 'px';
+      btn.style.top = (grokRect.top - btnSize - gap) + 'px';
+      btn.style.width = btnSize + 'px';
+      btn.style.height = btnSize + 'px';
+    }
 
-    const gap = 16; // Standard spacing
+    function mountDittoButton() {
+      if (document.getElementById('im-ditto-btn')) return;
 
-    // We use RIGHT and BOTTOM to keep him locked to that corner
+      const btn = document.createElement('button');
+      btn.id = 'im-ditto-btn';
+      btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto">`;
+      document.body.appendChild(btn);
 
-    const rightOffset = window.innerWidth - grokRect.right;
+      // Click handler for modal
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof toggleDittoModal === 'function') toggleDittoModal();
+      });
 
-    const bottomOffset = window.innerHeight - grokRect.top + gap;
-
-    // !important on everything to crush that ghost box
-
-    btn.style.cssText = `
-
-      position: fixed !important;
-
-      right: ${rightOffset}px !important;
-
-      bottom: ${bottomOffset}px !important;
-
-      width: ${btnSize}px !important;
-
-      height: ${btnSize}px !important;
-
-      background: transparent !important;
-
-      background-color: transparent !important;
-
-      border: none !important;
-
-      box-shadow: none !important;
-
-      outline: none !important;
-
-      padding: 0 !important;
-
-      margin: 0 !important;
-
-      z-index: 999999 !important;
-
-      display: flex !important;
-
-      align-items: center !important;
-
-      justify-content: center !important;
-
-      cursor: pointer !important;
-
-    `;
-
-    // Make Ditto fill the space so he matches the button size
+      // Precision alignment loop
+      const align = () => {
+        alignDittoToTwitterButtons();
+        requestAnimationFrame(align);
+      };
+      align();
+    }
 
     const img = btn.querySelector("img");
 
