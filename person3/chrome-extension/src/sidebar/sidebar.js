@@ -90,12 +90,17 @@ function renderPortfolioTab() {
 
 function renderBetRow(entry) {
   const positiveSide = entry.side === 'YES';
+  const amountLabel =
+    Number.isFinite(Number(entry.amount)) && Number(entry.amount) > 0
+      ? `$${Number(entry.amount).toLocaleString('en-US')}`
+      : '';
   return `
     <div class="im-position-row">
       <div class="im-position-info">
         <div class="im-position-title">${escapeHtml(entry.question || 'Unknown market')}</div>
         <div class="im-position-meta">
           <span style="color:${positiveSide ? 'var(--pm-green)' : 'var(--pm-red)'};">${escapeHtml(entry.side)}</span>
+          ${amountLabel ? `&nbsp;·&nbsp;${escapeHtml(amountLabel)}` : ''}
           &nbsp;·&nbsp;${formatTimestamp(entry.placedAt)}
         </div>
       </div>
@@ -767,7 +772,7 @@ function bindSidebarEvents() {
 
       try {
         await submitBetToBridge(payload);
-        const recorded = recordSidebarBet(marketId, side);
+        const recorded = recordSidebarBet(marketId, side, amount);
         if (recorded) rerenderPortfolioTabIfVisible();
         showToast(`Executed ${side} bet for $${amount.toFixed(2)}`);
       } catch {
@@ -867,17 +872,19 @@ function getSavedMarketsDetailed() {
     .reverse();
 }
 
-function recordSidebarBet(marketId, side) {
+function recordSidebarBet(marketId, side, amount) {
   if (!marketId || (side !== 'YES' && side !== 'NO')) return false;
 
   const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
   if (!market) return false;
+  const normalizedAmount = Math.max(1, Math.round(Number(amount) || 0));
 
   const betLog = loadJsonLocalStorage(IM_BET_LOG_KEY, []);
   betLog.push({
     marketId: String(market.id),
     question: market.question,
     side,
+    amount: normalizedAmount,
     yesOdds: Number(market.yesOdds) || 0,
     noOdds: Number(market.noOdds) || 0,
     placedAt: new Date().toISOString()
