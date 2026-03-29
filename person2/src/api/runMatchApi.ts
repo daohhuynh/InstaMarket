@@ -5,6 +5,14 @@ import express, { type Request, type Response } from "express";
 import { existsSync, readFileSync } from "node:fs";
 import { BedrockNovaLiteModel } from "../bedrock/BedrockNovaLiteModel.js";
 import type { JsonInputContentBlock } from "../bedrock/LanguageModel.js";
+import type { EvidenceSourceType, ResearchDossier, ResearchSourceRecord } from "../contracts/researchDossier.js";
+import { ThesisEngine } from "../thesis/ThesisEngine.js";
+import {
+  type ThesisJson,
+  type ThesisRequest,
+  validateThesisRequest,
+} from "../thesis/contracts.js";
+import { buildResearchDossierFromScrapers } from "../thesis/researchScraperRunner.js";
 
 interface CandidateMarket {
   id: string;
@@ -71,6 +79,69 @@ interface ExtractMarketQueryResponse {
   key_terms: string[];
   rationale: string;
   model_mode: "bedrock" | "heuristic";
+}
+
+interface ResearchThesisRequest {
+  tweet_text: string;
+  post_url?: string;
+  post_author?: string;
+  post_timestamp?: string;
+  market: {
+    market_id: string;
+    question: string;
+    category?: string;
+    event_title?: string;
+    slug?: string;
+    polymarket_url?: string;
+    yes_odds?: number;
+    no_odds?: number;
+    volume?: string;
+    resolution_date?: string;
+    market_context?: string;
+    resolution_criteria?: string;
+  };
+}
+
+interface ResearchDossierResponse {
+  report_id: string;
+  is_fallback: boolean;
+  source_counts: Record<EvidenceSourceType, number>;
+  briefing_lines: string[];
+  collection_errors: Array<{ source_type: string; error: string }>;
+  top_sources: Array<{
+    id: string;
+    source_type: EvidenceSourceType;
+    provider: string;
+    query: string;
+    title: string;
+    url: string;
+    author?: string;
+    published_at?: string;
+    snippet: string;
+    raw_text: string;
+    relevance_score: number;
+    engagement: Record<string, number>;
+  }>;
+  all_sources: Array<{
+    id: string;
+    source_type: EvidenceSourceType;
+    provider: string;
+    query: string;
+    title: string;
+    url: string;
+    author?: string;
+    published_at?: string;
+    snippet: string;
+    raw_text: string;
+    relevance_score: number;
+    engagement: Record<string, number>;
+  }>;
+}
+
+interface ResearchThesisResponse {
+  thesis: ThesisJson;
+  dossier: ResearchDossierResponse;
+  model_mode: "bedrock";
 }
 
 const NOISY_MEDIA_HINT_TOKENS = new Set([
@@ -1573,6 +1644,153 @@ async function main(): Promise<void> {
       response.status(500).json({
         error: message,
       });
+    }
+  });
+
+  // ── Research Thesis endpoint ──────────────────────────────────
+  app.post("/v1/research-thesis", async (request: Request, response: Response) => {
+    try {
+      const {
+        tweet_text,
+        market_question,
+        market_id,
+        yes_price,
+        no_price,
+        volume,
+        post_url,
+        post_author,
+      } = request.body as {
+        tweet_text?: string;
+        market_question?: string;
+        market_id?: string;
+        yes_price?: number;
+        no_price?: number;
+        volume?: string;
+        post_url?: string;
+        post_author?: string;
+      };
+
+      if (!tweet_text || !market_question) {
+        response.status(400).json({ error: "tweet_text and market_question are required." });
+        return;
+      }
+
+      const yesP = Number(yes_price) || 50;
+      const noP = Number(no_price) || 50;
+
+      // Build a ThesisRequest for the scraper + thesis pipeline
+      const thesisRequest: ThesisRequest = {
+        tweet_text: tweet_text.slice(0, 3000),
+        post_url: post_url || "",
+        post_author: post_author || "",
+        market: {
+          market_id: market_id || `ext_${Date.now()}`,
+          question: market_question,
+          yes_odds: yesP,
+          no_odds: noP,
+          volume: volume || "",
+          polymarket_url: "",
+        },
+      };
+
+      // Step 1: Scrape external sources (X, YouTube, Reddit, News, Google, TikTok)
+      const dossier = await buildResearchDossierFromScrapers(thesisRequest);
+
+      // Step 2: Run 4-agent thesis engine if Bedrock is available
+      let thesisResult: Record<string, any>;
+      let modelMode: "bedrock" | "heuristic";
+
+      if (model) {
+        modelMode = "bedrock";
+        const engine = new ThesisEngine(model);
+        thesisResult = await engine.buildThesis({ request: thesisRequest, dossier }) as unknown as Record<string, any>;
+      } else {
+        modelMode = "heuristic";
+        const textLower = tweet_text.toLowerCase();
+        const bullish = ["bullish", "yes", "moon", "up", "pump", "buy", "long", "win", "positive", "confirmed", "likely"];
+        const bearish = ["bearish", "no", "dump", "down", "sell", "short", "lose", "negative", "unlikely", "doubt"];
+        let bullScore = 0;
+        let bearScore = 0;
+        for (const w of bullish) { if (textLower.includes(w)) bullScore++; }
+        for (const w of bearish) { if (textLower.includes(w)) bearScore++; }
+        const netSignal = bullScore - bearScore;
+        const fairProb = Math.max(5, Math.min(95, yesP + netSignal * 5));
+        const action = netSignal > 0 ? "YES" : netSignal < 0 ? "NO" : "SKIP";
+        const totalSources = Object.values(dossier.source_counts).reduce((s, n) => s + n, 0);
+
+        thesisResult = {
+          market_id: thesisRequest.market.market_id,
+          fair_probability: fairProb,
+          confidence: Math.min(80, 30 + (bullScore + bearScore) * 8 + totalSources * 2),
+          suggested_action: action,
+          suggested_amount_usdc: action === "SKIP" ? 0 : 10,
+          stop_loss_cents: 15,
+          explanation: `Heuristic analysis: ${bullScore} bullish, ${bearScore} bearish signals. ${totalSources} external sources scraped.`,
+          catalysts: bullScore > 0 ? ["Tweet sentiment leans bullish"] : bearScore > 0 ? ["Tweet sentiment leans bearish"] : ["No clear directional signal"],
+          invalidation: ["Heuristic only — no AI model analysis"],
+          risk_flags: ["No AI model available", "Sentiment-only analysis"],
+          analyst_notes: {
+            market_analyst: { summary: `Market at ${yesP}% YES. Heuristic fair value: ${fairProb}%.`, bullets: [] },
+            evidence_analyst: { summary: `${totalSources} sources collected across platforms.`, bullets: [] },
+            resolution_analyst: { summary: "Resolution mechanics not analyzed in heuristic mode.", bullets: [] },
+            pm_synthesizer: { summary: `Net signal ${netSignal > 0 ? "bullish" : netSignal < 0 ? "bearish" : "neutral"}. ${action} recommendation.`, bullets: [] },
+          },
+        };
+      }
+
+      // Build normalized response with full dossier data
+      const thesis = thesisResult as Record<string, any>;
+      const normalized = {
+        market_id: String(thesis.market_id || market_id || "unknown"),
+        fair_probability: Number(thesis.fair_probability) || 50,
+        confidence: Math.max(0, Math.min(100, Number(thesis.confidence) || 0)),
+        suggested_action: ["YES", "NO", "SKIP"].includes(String(thesis.suggested_action)) ? String(thesis.suggested_action) : "SKIP",
+        suggested_amount_usdc: Math.max(0, Number(thesis.suggested_amount_usdc) || 0),
+        stop_loss_cents: Number(thesis.stop_loss_cents) || 15,
+        explanation: String(thesis.explanation || "No explanation provided."),
+        catalysts: Array.isArray(thesis.catalysts) ? thesis.catalysts.map(String) : [],
+        invalidation: Array.isArray(thesis.invalidation) ? thesis.invalidation.map(String) : [],
+        risk_flags: Array.isArray(thesis.risk_flags) ? thesis.risk_flags.map(String) : [],
+        analyst_notes: thesis.analyst_notes || {},
+      };
+
+      // Map dossier sources to the frontend format
+      const allSources = Array.isArray(dossier.sources)
+        ? dossier.sources.map((s) => ({
+            id: s.id || "",
+            source_type: s.source_type || "unknown",
+            title: s.title || "",
+            url: s.url || "",
+            snippet: s.snippet || s.raw_text || "",
+            raw_text: s.raw_text || s.snippet || "",
+            relevance_score: s.relevance_score ?? 0.5,
+            published_at: s.published_at || "",
+            provider: s.provider || "",
+            query: s.query || "",
+            author: s.author || "",
+          }))
+        : [];
+
+      const topSources = allSources
+        .sort((a, b) => b.relevance_score - a.relevance_score)
+        .slice(0, 5);
+
+      response.json({
+        thesis: normalized,
+        dossier: {
+          report_id: dossier.report_id || `thesis_${Date.now()}`,
+          is_fallback: Boolean(dossier.report_id?.startsWith("fallback")),
+          source_counts: dossier.source_counts || { x: 0, youtube: 0, reddit: 0, news: 0, google: 0, tiktok: 0 },
+          briefing_lines: Array.isArray(dossier.briefing_lines) ? dossier.briefing_lines : [],
+          collection_errors: Array.isArray(dossier.collection_errors) ? dossier.collection_errors : [],
+          top_sources: topSources,
+          all_sources: allSources,
+        },
+        model_mode: modelMode,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      response.status(500).json({ error: message });
     }
   });
 

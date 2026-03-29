@@ -51,11 +51,28 @@ function createSidebar() {
 
 function renderPortfolioTab() {
   const betLog = getBetLog();
-  if (!betLog.length) {
+
+  // Show active research at the top if available
+  let researchHtml = '';
+  if (IM_ACTIVE_MARKET_ID) {
+    const research = getMarketResearch(IM_ACTIVE_MARKET_ID);
+    if (research) {
+      researchHtml = `
+        <div class="im-section-header">Research</div>
+        ${renderResearchCard(research)}
+      `;
+    }
+  }
+
+  if (!betLog.length && !researchHtml) {
     return renderEmptyPanel(
       'No portfolio data yet',
-      'Place your first YES/NO bet from a tweet card and your activity will appear here.'
+      'Place your first YES/NO bet from a tweet card or click Research to analyze a market.'
     );
+  }
+
+  if (!betLog.length) {
+    return researchHtml;
   }
 
   const yesCount = betLog.filter(entry => entry.side === 'YES').length;
@@ -64,6 +81,7 @@ function renderPortfolioTab() {
   const recent = [...betLog].slice(-12).reverse();
 
   return `
+    ${researchHtml}
     <div class="im-portfolio-header">
       <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Live Portfolio Activity</div>
       <div class="im-portfolio-value">${betLog.length} Bets</div>
@@ -268,11 +286,32 @@ function renderResearchCard(research) {
 }
 
 function renderThesisLoadingCard(research) {
+  const steps = [
+    { icon: 'X', label: 'Scanning X / Twitter', cls: 'x' },
+    { icon: 'G', label: 'Searching Google News', cls: 'news' },
+    { icon: 'g', label: 'Searching Google', cls: 'google' },
+    { icon: 'R', label: 'Scanning Reddit', cls: 'reddit' },
+    { icon: 'Y', label: 'Scanning YouTube', cls: 'youtube' },
+    { icon: 'T', label: 'Scanning TikTok', cls: 'tiktok' },
+    { icon: 'M', label: 'Running Market Analyst', cls: 'analyst' },
+    { icon: 'E', label: 'Running Evidence Analyst', cls: 'analyst' },
+    { icon: 'R', label: 'Running Resolution Analyst', cls: 'analyst' },
+    { icon: 'P', label: 'PM Synthesizer', cls: 'analyst' },
+  ];
+
   return `
     <div class="im-risk-panel">
       <div class="im-market-title">${escapeHtml(research.title || 'Running thesis engine...')}</div>
-      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        ${escapeHtml(research.summary || 'Collecting evidence and analyst views...')}
+      <div class="im-research-steps">
+        ${steps.map((step, i) => `
+          <div class="im-research-step" style="animation-delay: ${i * 1.2}s">
+            <div class="im-research-step-icon ${escapeHtml(step.cls)}">${escapeHtml(step.icon)}</div>
+            <div class="im-research-step-label">${escapeHtml(step.label)}</div>
+            <div class="im-research-step-status">
+              <div class="im-research-step-spinner"></div>
+            </div>
+          </div>
+        `).join('')}
       </div>
       <div class="im-thesis-loading-bar">
         <div class="im-thesis-loading-fill"></div>

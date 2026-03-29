@@ -858,12 +858,92 @@
   font-weight: 700;
 }
 
+/* ── Research loading steps ── */
+
+.im-research-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 8px 0 12px 0;
+}
+
+.im-research-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: im-step-appear 0.4s ease forwards;
+}
+
+.im-research-step:nth-child(odd) {
+  background: rgba(255,255,255,0.02);
+}
+
+.im-research-step-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+  color: white;
+}
+
+.im-research-step-icon.x { background: #000; border: 1px solid #555; }
+.im-research-step-icon.news { background: #1a73e8; }
+.im-research-step-icon.google { background: #34a853; }
+.im-research-step-icon.reddit { background: #ff4500; }
+.im-research-step-icon.youtube { background: #ff0000; }
+.im-research-step-icon.tiktok { background: #010101; border: 1px solid #555; }
+.im-research-step-icon.analyst { background: var(--pm-purple); }
+
+.im-research-step-label {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--pm-text-secondary);
+  font-weight: 500;
+}
+
+.im-research-step-status {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.im-research-step-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--pm-border);
+  border-top-color: var(--pm-blue);
+  border-radius: 50%;
+  animation: im-step-spin 0.8s linear infinite;
+}
+
+@keyframes im-step-appear {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes im-step-spin {
+  to { transform: rotate(360deg); }
+}
+
 .im-thesis-loading-bar {
   width: 100%;
-  height: 6px;
+  height: 4px;
   background: var(--pm-surface2);
   border-radius: 999px;
   overflow: hidden;
+  margin-top: 4px;
 }
 
 .im-thesis-loading-fill {

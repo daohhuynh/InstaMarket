@@ -572,10 +572,10 @@
         top_sources: Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources : [],
         all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
       },
-      showFullData: false
+      showFullData: true
     });
     switchSidebarToMarkets(market.id);
-    showToast(`Research ready: "${market.question.slice(0, 40)}â€¦"`);
+    showToast(`Research ready: "${market.question.slice(0, 40)}..."`);
   }
 
   function extractTweetContext(tweet) {
