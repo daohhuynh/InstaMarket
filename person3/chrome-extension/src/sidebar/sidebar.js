@@ -585,8 +585,12 @@ function renderFullResearchData(data) {
         const rel = Number(source.relevance_score) || 0;
         const relClass = rel >= 0.7 ? 'im2-rel--high' : rel >= 0.5 ? 'im2-rel--mid' : 'im2-rel--low';
         const st = String(source.source_type || 'unknown').toLowerCase();
+        const sourceUrl = sanitizePostUrl(source.url || '');
+        const sourceActionAttrs = sourceUrl
+          ? ` data-im-action="open-source-link" data-source-url="${escapeHtml(sourceUrl)}" title="Open source website" role="button" tabindex="0"`
+          : '';
         return `
-          <div class="im2-source-card">
+          <div class="im2-source-card ${sourceUrl ? 'im2-source-card-link' : ''}"${sourceActionAttrs}>
             <div class="im2-source-header">
               <span class="im2-source-dot im2-source-dot--${st}"></span>
               <span class="im2-source-platform">${escapeHtml(st.toUpperCase())}</span>
@@ -905,6 +909,23 @@ function bindSidebarEvents() {
       return;
     }
 
+    if (action === 'open-source-link') {
+      if (event.target?.closest?.('a[href]')) {
+        return;
+      }
+
+      const sourceUrl = sanitizePostUrl(target.getAttribute('data-source-url') || '');
+      if (!sourceUrl) {
+        showToast('No source URL available.');
+        return;
+      }
+      const opened = openUrlInNewTab(sourceUrl);
+      if (!opened) {
+        showToast('Could not open source in a new tab.');
+      }
+      return;
+    }
+
     if (action === 'show-bet-amount') {
       const sideLabel = target.getAttribute('data-side') === 'NO' ? 'NO' : 'YES';
       const amountRaw = Number(target.getAttribute('data-amount'));
@@ -1041,7 +1062,7 @@ function bindSidebarEvents() {
   });
 
   sidebar.addEventListener('keydown', event => {
-    const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"], [data-im-action="open-market-link"]');
+    const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"], [data-im-action="open-market-link"], [data-im-action="open-source-link"]');
     if (!target) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();

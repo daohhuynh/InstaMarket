@@ -2261,6 +2261,23 @@
   gap: 5px;
 }
 
+.im2-source-card.im2-source-card-link {
+  cursor: pointer;
+  border: 1px solid color-mix(in oklab, var(--im2-border) 88%, transparent);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.im2-source-card.im2-source-card-link:hover {
+  border-color: color-mix(in oklab, var(--im2-accent) 52%, var(--im2-border));
+  background: color-mix(in oklab, var(--im2-muted) 82%, var(--im2-accent) 18%);
+  transform: translateY(-1px);
+}
+
+.im2-source-card.im2-source-card-link:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--im2-accent) 65%, white 35%);
+  outline-offset: 2px;
+}
+
 .im2-source-header {
   display: flex;
   align-items: center;
