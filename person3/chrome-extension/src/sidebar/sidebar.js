@@ -301,10 +301,6 @@ function renderThesisCard(research) {
   const topSources = Array.isArray(dossier.top_sources) ? dossier.top_sources : [];
   const effectiveSources = coalesceSources(allSources, topSources);
   const briefingLines = Array.isArray(dossier.briefing_lines) ? dossier.briefing_lines : [];
-  const fullDataVisible = Boolean(research.showFullData);
-  const catalysts = Array.isArray(thesis.catalysts) ? thesis.catalysts : [];
-  const invalidation = Array.isArray(thesis.invalidation) ? thesis.invalidation : [];
-  const riskFlags = Array.isArray(thesis.risk_flags) ? thesis.risk_flags : [];
   const fairProbability = Number.isFinite(Number(thesis.fair_probability)) ? Number(thesis.fair_probability) : 0;
   const confidence = Number.isFinite(Number(thesis.confidence)) ? Number(thesis.confidence) : 0;
   const suggestedAmount = Number.isFinite(Number(thesis.suggested_amount_usdc)) ? Number(thesis.suggested_amount_usdc) : 0;
@@ -315,146 +311,224 @@ function renderThesisCard(research) {
   const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
   const defaultTradeSide = suggestedAction === 'SKIP' ? 'YES' : suggestedAction;
   const maxStopLoss = Number.isFinite(Number(thesis.stop_loss_cents)) ? Number(thesis.stop_loss_cents) : 15;
+  const sourceCounts = normalizeSourceCounts(dossier.source_counts || {}, effectiveSources);
+  const reportId = dossier.report_id || '';
+
+  // Derived
+  const yesOdds = Number.isFinite(Number(market?.yesOdds)) ? Number(market.yesOdds) : null;
+  const edge = yesOdds !== null ? fairProbability - yesOdds : null;
+  const conviction = confidence >= 75 ? 'High' : confidence >= 60 ? 'Medium' : 'Low';
+  const sourceCoverage = Object.values(sourceCounts).reduce((a, b) => a + Number(b), 0);
+  const evidenceQuality = sourceCoverage >= 15 ? 'Strong' : sourceCoverage >= 8 ? 'Moderate' : 'Thin';
+
+  // Scenarios
+  const baseCase = fairProbability;
+  const bullCase = Math.min(99, fairProbability + Math.max(3, (100 - confidence) * 0.25));
+  const bearCase = Math.max(1, fairProbability - Math.max(3, (100 - confidence) * 0.25));
+
+  const convDotClass = conviction === 'High' ? 'im2-dot--yes' : conviction === 'Medium' ? 'im2-dot--skip' : 'im2-dot--no';
+  const evBars = evidenceQuality === 'Strong' ? 3 : evidenceQuality === 'Moderate' ? 2 : 1;
+  const biasArrow = suggestedAction === 'YES' ? '↗' : suggestedAction === 'NO' ? '↘' : '→';
 
   return `
-    <div class="im-risk-panel">
-      <div class="im-thesis-header">
-        <div class="im-market-title">${escapeHtml(research.title || 'AI Thesis')}</div>
-        <div class="im-thesis-chip">${confidence}% confidence</div>
+    <div class="im2-report-panel">
+      <div class="im2-report-header">
+        <span class="im2-report-label">REPORT</span>
+        <span class="im2-report-sep">·</span>
+        <span class="im2-report-id">${escapeHtml(reportId || (marketId ? marketId.slice(0, 24) : 'n/a'))}</span>
       </div>
 
-      <div class="im-thesis-metrics">
-        <div class="im-thesis-metric">
-          <div class="im-thesis-metric-label">Fair Probability</div>
-          <div class="im-thesis-metric-value">${fairProbability.toFixed(1)}%</div>
-        </div>
-        <div class="im-thesis-metric">
-          <div class="im-thesis-metric-label">Suggested Action</div>
-          <div class="im-thesis-metric-value ${suggestedAction === 'YES' ? 'yes' : suggestedAction === 'NO' ? 'no' : ''}">${escapeHtml(suggestedAction)}</div>
-        </div>
-        <div class="im-thesis-metric">
-          <div class="im-thesis-metric-label">Suggested Size</div>
-          <div class="im-thesis-metric-value">$${suggestedAmount.toFixed(2)}</div>
-        </div>
-      </div>
+      <div class="im2-report-title">${escapeHtml(research.title || thesis.market_id || 'AI Thesis')}</div>
 
-      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        ${escapeHtml(thesis.explanation || research.summary || 'No thesis explanation provided.')}
-      </div>
-
-      <div class="im-thesis-actions-row">
-        <button class="im-btn-secondary" data-im-action="toggle-full-research" data-market-id="${escapeHtml(marketId)}">
-          ${fullDataVisible ? 'Hide Full Research' : 'View Full Research'}
-        </button>
-        <button class="im-btn-secondary" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">
-          Download PDF
-        </button>
-      </div>
-
-      ${catalysts.length ? `
-        <div>
-          <div class="im-thesis-section-title">Catalysts</div>
-          <ul class="im-thesis-list">${catalysts.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      <div class="im2-signal-row">
+        <div class="im2-bias-badge im2-bias-badge--${suggestedAction.toLowerCase()}">${biasArrow} ${escapeHtml(suggestedAction)}</div>
+        <div class="im2-conviction-group">
+          <span class="im2-dot ${convDotClass}"></span>
+          <span class="im2-conviction-label">${escapeHtml(conviction)} conviction</span>
         </div>
-      ` : ''}
-
-      ${invalidation.length ? `
-        <div>
-          <div class="im-thesis-section-title">Invalidation</div>
-          <ul class="im-thesis-list">${invalidation.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-
-      ${riskFlags.length ? `
-        <div>
-          <div class="im-thesis-section-title">Risk Flags</div>
-          <div class="im-thesis-risk-flags">
-            ${riskFlags.map(flag => `<span class="im-thesis-risk-flag">${escapeHtml(flag)}</span>`).join('')}
+        <div class="im2-evidence-group">
+          <div class="im2-evidence-bars">
+            ${[1,2,3].map(i => `<div class="im2-ev-bar ${i <= evBars ? 'im2-ev-bar--filled' : ''}"></div>`).join('')}
           </div>
+          <span class="im2-evidence-label">${escapeHtml(evidenceQuality)}</span>
         </div>
-      ` : ''}
-
-      <div class="im-thesis-trade-panel" data-market-id="${escapeHtml(marketId)}">
-        <div class="im-thesis-section-title">Execute Bet (Manual Override)</div>
-        <div class="im-thesis-exec-grid">
-          <label class="im-thesis-field">
-            <span>Side</span>
-            <select class="im-thesis-select" data-im-field="trade-side">
-              <option value="YES" ${defaultTradeSide === 'YES' ? 'selected' : ''}>YES</option>
-              <option value="NO" ${defaultTradeSide === 'NO' ? 'selected' : ''}>NO</option>
-            </select>
-          </label>
-          <label class="im-thesis-field">
-            <span>Amount (USDC)</span>
-            <input class="im-thesis-input" data-im-field="trade-amount" type="number" min="1" step="0.01" value="${Math.max(1, suggestedAmount || 1).toFixed(2)}" />
-          </label>
-        </div>
-        <div class="im-thesis-stop-loss">Suggested stop loss: ${maxStopLoss}c</div>
-        <button class="im-btn-primary" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">
-          Place Bet
-        </button>
-        ${market?.polymarketUrl ? `<a class="im-thesis-open-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">Open market on Polymarket</a>` : ''}
       </div>
 
-      ${fullDataVisible ? renderFullResearchData({
+      <div class="im2-sep"></div>
+
+      <div class="im2-section-label">FAIR VALUE SCENARIOS</div>
+      <div class="im2-scenarios">
+        <div class="im2-scenario-row">
+          <span class="im2-scenario-name">Base</span>
+          <div class="im2-bar-track"><div class="im2-bar-fill im2-bar-fill--base" style="width:${baseCase}%"></div></div>
+          <span class="im2-scenario-pct im2-scenario-pct--base">${Math.round(baseCase)}%</span>
+        </div>
+        <div class="im2-scenario-row">
+          <span class="im2-scenario-name">Bull</span>
+          <div class="im2-bar-track"><div class="im2-bar-fill im2-bar-fill--bull" style="width:${bullCase}%"></div></div>
+          <span class="im2-scenario-pct im2-scenario-pct--bull">${Math.round(bullCase)}%</span>
+        </div>
+        <div class="im2-scenario-row">
+          <span class="im2-scenario-name">Bear</span>
+          <div class="im2-bar-track"><div class="im2-bar-fill im2-bar-fill--bear" style="width:${bearCase}%"></div></div>
+          <span class="im2-scenario-pct im2-scenario-pct--bear">${Math.round(bearCase)}%</span>
+        </div>
+      </div>
+
+      <div class="im2-mme-panel">
+        <div class="im2-mme-cell">
+          <div class="im2-mme-label">MARKET</div>
+          <div class="im2-mme-value">${yesOdds !== null ? Math.round(yesOdds) + '%' : '—'}</div>
+        </div>
+        <div class="im2-mme-div"></div>
+        <div class="im2-mme-cell">
+          <div class="im2-mme-label">MODEL</div>
+          <div class="im2-mme-value">${Math.round(fairProbability)}%</div>
+        </div>
+        <div class="im2-mme-div"></div>
+        <div class="im2-mme-cell">
+          <div class="im2-mme-label">EDGE</div>
+          <div class="im2-mme-value ${edge !== null ? (edge >= 0 ? 'im2-mme-yes' : 'im2-mme-no') : ''}">${edge !== null ? (edge >= 0 ? '+' : '') + Math.round(edge) + ' pts' : '—'}</div>
+        </div>
+      </div>
+
+      <div class="im2-explanation">${escapeHtml(thesis.explanation || research.summary || 'No thesis explanation provided.')}</div>
+
+      <div class="im2-sep"></div>
+      <div class="im2-section-label">EXECUTE TRADE</div>
+      <div class="im2-trade-panel" data-market-id="${escapeHtml(marketId)}">
+        <div class="im2-trade-toggle">
+          <button class="im2-trade-btn ${defaultTradeSide === 'YES' ? 'im2-trade-btn--yes-active' : 'im2-trade-inactive'}" data-im-action="trade-side-toggle" data-im-field="trade-side" data-value="YES">YES</button>
+          <button class="im2-trade-btn ${defaultTradeSide === 'NO' ? 'im2-trade-btn--no-active' : 'im2-trade-inactive'}" data-im-action="trade-side-toggle" data-im-field="trade-side" data-value="NO">NO</button>
+        </div>
+        <div class="im2-amount-wrap">
+          <span class="im2-amount-pre">$</span>
+          <input class="im2-amount-input" data-im-field="trade-amount" type="number" min="1" step="0.01" value="${Math.max(1, suggestedAmount || 1).toFixed(2)}" />
+          <span class="im2-amount-suf">USDC</span>
+        </div>
+        <div class="im2-stop-row">
+          <span class="im2-stop-icon">◎</span>
+          <span class="im2-stop-text">Stop loss: <span class="im2-stop-val">${maxStopLoss}c</span></span>
+        </div>
+        ${suggestedAction === 'SKIP'
+          ? `<button class="im2-cta-btn im2-cta-btn--skip" disabled>Model suggests SKIP</button>`
+          : `<button class="im2-cta-btn im2-cta-btn--active" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">Place Bet ${escapeHtml(suggestedAction)}</button>`
+        }
+        ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">↗ Open on Polymarket</a>` : ''}
+      </div>
+
+      <div class="im2-sep"></div>
+      <div class="im2-bottom-actions">
+        <button class="im2-bottom-btn" data-im-action="refresh-live-markets">↺ Refresh Live Markets</button>
+        <button class="im2-bottom-btn" data-im-action="download-research-pdf" data-market-id="${escapeHtml(marketId)}">↓ PDF</button>
+      </div>
+
+      ${renderFullResearchData({
         thesis,
         market,
-        reportId: dossier.report_id || '',
+        reportId,
         isFallback: Boolean(dossier.is_fallback),
         briefingLines,
-        sourceCounts: dossier.source_counts || {},
+        sourceCounts,
         allSources: effectiveSources,
-        collectionErrors: Array.isArray(dossier.collection_errors) ? dossier.collection_errors : []
-      }) : ''}
+        collectionErrors: Array.isArray(dossier.collection_errors) ? dossier.collection_errors : [],
+        suggestedAction,
+        suggestedAmount,
+        marketId,
+      })}
     </div>
   `;
 }
 
 function renderFullResearchData(data) {
   const thesis = data?.thesis || {};
-  const market = data?.market || null;
   const allSources = Array.isArray(data?.allSources) ? data.allSources : [];
-  const sourceCounts = normalizeSourceCounts(data?.sourceCounts || {}, allSources);
+  const sourceCounts = data?.sourceCounts || {};
   const briefingLines = Array.isArray(data?.briefingLines) ? data.briefingLines : [];
-  const collectionErrors = Array.isArray(data?.collectionErrors) ? data.collectionErrors : [];
   const isFallback = Boolean(data?.isFallback);
+  const suggestedAction = data?.suggestedAction || 'SKIP';
+  const suggestedAmount = Number(data?.suggestedAmount || 0);
+
+  const coverageOrder = ['news', 'google', 'x', 'tiktok', 'reddit', 'youtube'];
+  const coverageLabels = { news: 'News', google: 'Google', x: 'X', tiktok: 'TikTok', reddit: 'Reddit', youtube: 'YouTube' };
+  const coverageItems = coverageOrder
+    .map(key => ({ key, label: coverageLabels[key], count: Number(sourceCounts[key] || 0) }))
+    .filter(item => item.count > 0);
+
+  const agentDecision = suggestedAction === 'SKIP'
+    ? 'SKIP $0.00'
+    : `${suggestedAction} $${suggestedAmount.toFixed(2)}`;
+  const decisionClass = suggestedAction === 'YES' ? 'im2-pipeline-yes' : suggestedAction === 'NO' ? 'im2-pipeline-no' : 'im2-pipeline-skip';
+
+  const BRIEFING_INIT = 4;
+  const hasBriefingMore = briefingLines.length > BRIEFING_INIT;
+  const briefingId = 'im2-briefing-' + String(data?.reportId || 'r').replace(/[^a-z0-9]/gi, '');
 
   return `
-    <div class="im-full-research-panel">
-      <div class="im-thesis-section-title">Full Research Data</div>
-      <div class="im-full-research-meta">Report ID: ${escapeHtml(data?.reportId || 'n/a')}</div>
-      ${isFallback ? `<div class="im-full-research-warning">Fallback mode: scraper pipeline failed, so this report is degraded.</div>` : ''}
-      ${renderExecutiveBrief({ thesis, market, sourceCounts, allSources })}
-      ${renderAgentInteractionGraph(thesis)}
-      <div class="im-full-research-meta">
-        Counts: x=${Number(sourceCounts.x ?? 0)}, youtube=${Number(sourceCounts.youtube ?? 0)}, reddit=${Number(sourceCounts.reddit ?? 0)}, news=${Number(sourceCounts.news ?? 0)}, google=${Number(sourceCounts.google ?? 0)}, tiktok=${Number(sourceCounts.tiktok ?? 0)}
-      </div>
-      ${collectionErrors.length ? `
-        <div>
-          <div class="im-thesis-section-title">Collection Errors</div>
-          <ul class="im-thesis-list">${collectionErrors.map(item => `<li>${escapeHtml(String(item.source_type || 'unknown'))}: ${escapeHtml(String(item.error || 'Unknown error'))}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${briefingLines.length ? `
-        <div>
-          <div class="im-thesis-section-title">Briefing</div>
-          <ul class="im-thesis-list">${briefingLines.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      <div class="im-thesis-section-title">Sources (${allSources.length})</div>
-      <div class="im-full-research-sources">
-        ${allSources.length ? allSources.map(source => `
-          <div class="im-full-research-source">
-            <div class="im-full-research-source-top">
-              <span class="im-full-research-type">${escapeHtml(String(source.source_type || '').toUpperCase())}</span>
-              <span class="im-full-research-score">Rel ${(Number(source.relevance_score) || 0).toFixed(2)}</span>
-            </div>
-            <div class="im-full-research-title">${escapeHtml(source.title || 'Untitled source')}</div>
-            <a class="im-thesis-open-link" href="${escapeHtml(source.url || '#')}" target="_blank" rel="noopener noreferrer">Open source</a>
-            <div class="im-full-research-snippet">${escapeHtml(source.snippet || source.raw_text || '')}</div>
+    <div class="im2-sep"></div>
+
+    <div class="im2-section-header-row">
+      <span class="im2-section-label">AGENT PIPELINE</span>
+      <span class="im2-pipeline-decision ${decisionClass}">${escapeHtml(agentDecision)}</span>
+      <span class="im2-chevron">▾</span>
+    </div>
+
+    ${isFallback ? `<div class="im2-warning">Fallback mode: scraper pipeline failed.</div>` : ''}
+
+    ${coverageItems.length ? `
+      <div class="im2-section-label" style="margin-top:10px;">COVERAGE</div>
+      <div class="im2-coverage-pills">
+        ${coverageItems.map(item => `
+          <div class="im2-coverage-pill">
+            <span class="im2-cov-label">${escapeHtml(item.label)}</span>
+            <span class="im2-cov-count">${item.count}</span>
           </div>
-        `).join('') : '<div class="im-full-research-meta">No sources available.</div>'}
+        `).join('')}
       </div>
+    ` : ''}
+
+    ${briefingLines.length ? `
+      <div class="im2-section-label" style="margin-top:10px;">BRIEFING</div>
+      <div class="im2-briefing-list">
+        ${briefingLines.slice(0, BRIEFING_INIT).map((line, idx) => {
+          const st = getBriefingSourceType(line, allSources, idx);
+          return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
+        }).join('')}
+        ${hasBriefingMore ? `
+          <div class="im2-briefing-more" id="${escapeHtml(briefingId)}" style="display:none;flex-direction:column;gap:8px;">
+            ${briefingLines.slice(BRIEFING_INIT).map((line, idx) => {
+              const st = getBriefingSourceType(line, allSources, BRIEFING_INIT + idx);
+              return `<div class="im2-briefing-item"><span class="im2-src-tag im2-src-tag--${st}">${escapeHtml(st.toUpperCase())}</span><span class="im2-briefing-text">${escapeHtml(line)}</span></div>`;
+            }).join('')}
+          </div>
+          <button class="im2-briefing-toggle" data-im-action="toggle-briefing" data-briefing-id="${escapeHtml(briefingId)}" data-expanded="0">∨ Show more</button>
+        ` : ''}
+      </div>
+    ` : ''}
+
+    <div class="im2-sep"></div>
+    <div class="im2-section-header-row">
+      <span class="im2-section-label">SOURCES</span>
+      <span class="im2-sources-count">${allSources.length} total</span>
+      <span class="im2-chevron">▴</span>
+    </div>
+    <div class="im2-sources-list">
+      ${allSources.length ? allSources.map(source => {
+        const rel = Number(source.relevance_score) || 0;
+        const relClass = rel >= 0.7 ? 'im2-rel--high' : rel >= 0.5 ? 'im2-rel--mid' : 'im2-rel--low';
+        const st = String(source.source_type || 'unknown').toLowerCase();
+        return `
+          <div class="im2-source-card">
+            <div class="im2-source-header">
+              <span class="im2-source-dot im2-source-dot--${st}"></span>
+              <span class="im2-source-platform">${escapeHtml(st.toUpperCase())}</span>
+              <span class="im2-rel-score ${relClass}">Rel ${rel.toFixed(2)}</span>
+            </div>
+            <div class="im2-source-title">${escapeHtml(source.title || 'Untitled source')}</div>
+            ${(source.snippet || source.raw_text) ? `<div class="im2-source-snippet">${escapeHtml((source.snippet || source.raw_text || '').slice(0, 150))}</div>` : ''}
+          </div>
+        `;
+      }).join('') : '<div class="im2-muted">No sources available.</div>'}
     </div>
   `;
 }
@@ -483,57 +557,8 @@ function normalizeSourceCounts(sourceCounts, allSources) {
   return normalized;
 }
 
-function renderExecutiveBrief({ thesis, market, sourceCounts, allSources }) {
-  const fairProb = Number.isFinite(Number(thesis.fair_probability)) ? Number(thesis.fair_probability) : 50;
-  const confidence = Number.isFinite(Number(thesis.confidence)) ? Number(thesis.confidence) : 50;
-  const suggestedAction = thesis.suggested_action === 'YES' || thesis.suggested_action === 'NO' || thesis.suggested_action === 'SKIP'
-    ? thesis.suggested_action
-    : 'SKIP';
-  const suggestedAmount = Number.isFinite(Number(thesis.suggested_amount_usdc)) ? Number(thesis.suggested_amount_usdc) : 0;
-  const stopLossCents = Number.isFinite(Number(thesis.stop_loss_cents)) ? Number(thesis.stop_loss_cents) : 15;
-  const yesOdds = Number.isFinite(Number(market?.yesOdds)) ? Number(market.yesOdds) : null;
-  const marketImplied = yesOdds !== null ? yesOdds : 50;
-  const edge = fairProb - marketImplied;
-  const edgeDirection = edge >= 0 ? 'Long YES bias' : 'Long NO bias';
-  const conviction = confidence >= 75 ? 'High' : confidence >= 60 ? 'Medium' : 'Low';
-  const sourceCoverage =
-    Number(sourceCounts.x ?? 0) +
-    Number(sourceCounts.youtube ?? 0) +
-    Number(sourceCounts.reddit ?? 0) +
-    Number(sourceCounts.news ?? 0) +
-    Number(sourceCounts.google ?? 0) +
-    Number(sourceCounts.tiktok ?? 0);
-  const evidenceQuality = sourceCoverage >= 15 ? 'Strong' : sourceCoverage >= 8 ? 'Moderate' : 'Thin';
-  const baseCase = fairProb;
-  const bullCase = Math.min(99, fairProb + Math.max(3, (100 - confidence) * 0.25));
-  const bearCase = Math.max(1, fairProb - Math.max(3, (100 - confidence) * 0.25));
-
-  return `
-    <div>
-      <div class="im-thesis-section-title">Executive Brief</div>
-      <div class="im-full-research-meta">
-        View: <strong>${escapeHtml(edgeDirection)}</strong> | Conviction: <strong>${escapeHtml(conviction)}</strong> | Evidence: <strong>${escapeHtml(evidenceQuality)}</strong>
-      </div>
-      <div class="im-full-research-meta">
-        Base/Bull/Bear fair prob: <strong>${baseCase.toFixed(1)}%</strong> / <strong>${bullCase.toFixed(1)}%</strong> / <strong>${bearCase.toFixed(1)}%</strong>
-      </div>
-      <div class="im-full-research-meta">
-        Position plan: side <strong>${escapeHtml(suggestedAction)}</strong>, size <strong>$${suggestedAmount.toFixed(2)}</strong>, stop <strong>${stopLossCents}c</strong>, edge vs market <strong>${edge >= 0 ? '+' : ''}${edge.toFixed(1)} pts</strong>.
-      </div>
-      <div class="im-full-research-meta">
-        ${escapeHtml(thesis.explanation || 'No thesis narrative available.')}
-      </div>
-      ${Array.isArray(thesis.risk_flags) && thesis.risk_flags.length ? `
-        <div>
-          <div class="im-thesis-section-title">Risk Monitor</div>
-          <ul class="im-thesis-list">${thesis.risk_flags.map(flag => `<li>${escapeHtml(flag)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${allSources.length ? `
-        <div class="im-full-research-meta">Top evidence: ${escapeHtml(allSources[0]?.title || 'n/a')}</div>
-      ` : ''}
-    </div>
-  `;
+function renderExecutiveBrief() {
+  return '';
 }
 
 function renderAgentInteractionGraph(thesis) {
@@ -597,6 +622,21 @@ function normalizeSources(items) {
       author: String(item?.author || '')
     }))
     .filter(item => item.title || item.url || item.snippet || item.raw_text);
+}
+
+function getBriefingSourceType(line, allSources, idx) {
+  if (!Array.isArray(allSources)) return 'news';
+  const lower = String(line || '').toLowerCase();
+  for (const src of allSources) {
+    const t = String(src?.title || '').toLowerCase();
+    if (t.length >= 15 && lower.includes(t.slice(0, 15))) {
+      return String(src.source_type || 'news').toLowerCase();
+    }
+  }
+  if (allSources.length > 0) {
+    return String(allSources[idx % allSources.length]?.source_type || 'news').toLowerCase();
+  }
+  return 'news';
 }
 
 function renderResearchPlaceholder(primaryMarket) {
@@ -831,17 +871,47 @@ function bindSidebarEvents() {
       return;
     }
 
+    if (action === 'trade-side-toggle') {
+      const panel = target.closest('.im2-trade-panel');
+      if (!panel) return;
+      panel.querySelectorAll('[data-im-field="trade-side"]').forEach(btn => {
+        btn.classList.remove('im2-trade-btn--yes-active', 'im2-trade-btn--no-active');
+        btn.classList.add('im2-trade-inactive');
+      });
+      target.classList.remove('im2-trade-inactive');
+      const val = target.getAttribute('data-value');
+      target.classList.add(val === 'NO' ? 'im2-trade-btn--no-active' : 'im2-trade-btn--yes-active');
+      return;
+    }
+
+    if (action === 'toggle-briefing') {
+      const briefingId = target.getAttribute('data-briefing-id');
+      const moreDiv = briefingId ? document.getElementById(briefingId) : null;
+      if (!moreDiv) return;
+      const expanded = target.getAttribute('data-expanded') === '1';
+      if (expanded) {
+        moreDiv.style.display = 'none';
+        target.textContent = '∨ Show more';
+        target.setAttribute('data-expanded', '0');
+      } else {
+        moreDiv.style.display = 'flex';
+        target.textContent = '∧ Show less';
+        target.setAttribute('data-expanded', '1');
+      }
+      return;
+    }
+
     if (action === 'research-place-bet' && marketId) {
-      const panel = target.closest('.im-thesis-trade-panel');
+      const panel = target.closest('.im2-trade-panel');
       if (!panel) {
         showToast('Trade controls not found.');
         return;
       }
 
       const amountInput = panel.querySelector('[data-im-field="trade-amount"]');
-      const sideInput = panel.querySelector('[data-im-field="trade-side"]');
+      const activeSideBtn = panel.querySelector('.im2-trade-btn--yes-active, .im2-trade-btn--no-active');
       const amount = Number(amountInput?.value || 0);
-      const side = sideInput?.value === 'NO' ? 'NO' : 'YES';
+      const side = activeSideBtn?.getAttribute('data-value') === 'NO' ? 'NO' : 'YES';
       if (!Number.isFinite(amount) || amount <= 0) {
         showToast('Enter a valid USDC amount.');
         return;
