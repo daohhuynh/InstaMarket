@@ -12,7 +12,7 @@ Polymarket × Twitter. Bet on live markets while doomscrolling.
 4. Select this folder: `person3/chrome-extension/`
 5. Open [twitter.com](https://twitter.com) or [x.com](https://x.com)
 
-Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar, the Ditto button floating bottom-right, and market action pills injected under tweets that match existing markets.
+Done. You'll see the InstaMarket sidebar replace Twitter's right sidebar and market action pills injected under tweets that match existing markets.
 
 ---
 
@@ -56,7 +56,7 @@ There are no runtime mock constants in the extension now.
 - Markets are fetched from:
   `GET https://gamma-api.polymarket.com/markets?active=true&closed=false`
 - Portfolio/Saved data is created from user actions in the extension and stored locally.
-- Ditto modal shows live local activity stats until a real matchmaker backend is connected.
+
 
 ### Tweet-to-market matching
 The extension uses a deterministic parser in `src/content/data.js`:
@@ -85,7 +85,7 @@ All colors/spacing live in CSS variables at the top of `src/styles/main.css`:
 ```css
 --pm-green: #00c853    /* YES / positive / up arrows */
 --pm-red: #ff3d57      /* NO / negative / down arrows */
---pm-purple: #7c3aed   /* Ditto / recommendations */
+--pm-purple: #7c3aed   /* recommendations */
 --pm-yellow: #f5a623   /* Warnings / hedges */
 --pm-bg: #0d0f13       /* Main background */
 --pm-surface: #161a23  /* Card background */
