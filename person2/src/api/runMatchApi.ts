@@ -2,7 +2,10 @@ import cors from "cors";
 // @ts-ignore
 import { config as loadDotEnv } from "dotenv";
 import express, { type Request, type Response } from "express";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
 import { BedrockNovaLiteModel } from "../bedrock/BedrockNovaLiteModel.js";
 import type { JsonInputContentBlock } from "../bedrock/LanguageModel.js";
 
@@ -1573,6 +1576,162 @@ async function main(): Promise<void> {
       response.status(500).json({
         error: message,
       });
+    }
+  });
+
+  app.post("/v1/research-thesis", async (request: Request, response: Response) => {
+    const outputPath = join(tmpdir(), `im-research-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+    try {
+      const body = (request.body ?? {}) as {
+        tweet_text?: string;
+        market?: { id?: string; question?: string; category?: string; yesOdds?: number; noOdds?: number };
+        post_url?: string;
+        post_author?: string;
+        post_timestamp?: string;
+      };
+
+      const tweetText = typeof body.tweet_text === "string" ? body.tweet_text.trim() : "";
+      const marketQuestion = typeof body.market?.question === "string" ? body.market.question.trim() : "";
+      const marketId = typeof body.market?.id === "string" ? body.market.id.trim() : "";
+      const postUrl = typeof body.post_url === "string" ? body.post_url.trim() : "";
+
+      if (!marketQuestion) {
+        response.status(400).json({ error: "market.question is required." });
+        return;
+      }
+
+      // --- Step 1: Run the Python scraper to collect real sources ---
+      const scraperArgs = [
+        "-m", "signalmarket_scrapers",
+        "--market-question", marketQuestion,
+        "--market-id", marketId || "unknown",
+        "--output", outputPath,
+        "--max-items-per-source", "6",
+      ];
+      if (postUrl) scraperArgs.push("--x-post-url", postUrl);
+      if (tweetText) scraperArgs.push("--query", tweetText.slice(0, 200));
+
+      const scraperEnv = { ...process.env };
+
+      let dossier: Record<string, unknown> = {
+        report_id: `rpt-${Date.now()}-${marketId.slice(0, 8)}`,
+        is_fallback: true,
+        source_counts: { x: 0, youtube: 0, reddit: 0, news: 0, google: 0, tiktok: 0 },
+        briefing_lines: [],
+        collection_errors: [],
+        top_sources: [],
+        all_sources: [],
+      };
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn("python3", scraperArgs, {
+            cwd: process.cwd(),
+            env: scraperEnv,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+
+          let stderr = "";
+          child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+          child.on("close", (code) => {
+            if (code !== 0) {
+              reject(new Error(`Scraper exited with code ${code}: ${stderr.slice(0, 300)}`));
+            } else {
+              resolve();
+            }
+          });
+          child.on("error", reject);
+        });
+
+        if (existsSync(outputPath)) {
+          const raw = readFileSync(outputPath, "utf-8");
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const sources = Array.isArray(parsed.sources) ? parsed.sources as Record<string, unknown>[] : [];
+          const topSources = sources.slice(0, 8);
+
+          dossier = {
+            report_id: typeof parsed.report_id === "string" ? parsed.report_id : dossier.report_id,
+            is_fallback: false,
+            source_counts: (parsed.source_counts && typeof parsed.source_counts === "object") ? parsed.source_counts : dossier.source_counts,
+            briefing_lines: Array.isArray(parsed.briefing_lines) ? parsed.briefing_lines : [],
+            collection_errors: Array.isArray(parsed.collection_errors) ? parsed.collection_errors : [],
+            top_sources: topSources,
+            all_sources: sources,
+          };
+        }
+      } catch (scraperError) {
+        const msg = scraperError instanceof Error ? scraperError.message : String(scraperError);
+        (dossier.collection_errors as string[]).push(`Scraper failed: ${msg}`);
+      }
+
+      // --- Step 2: Generate thesis using Bedrock (or heuristic) with gathered sources ---
+      const briefingLines = Array.isArray(dossier.briefing_lines) ? dossier.briefing_lines as string[] : [];
+      const sourceSummary = briefingLines.slice(0, 12).join("\n") || "(no sources collected)";
+
+      let thesis: { confidence: number; explanation: string };
+      let modelMode: "bedrock" | "heuristic";
+
+      if (model) {
+        const generationRequest = {
+          system_prompt:
+            "You are a prediction market research analyst. Given a market question, a tweet, and collected source evidence, " +
+            "provide a concise thesis on whether the market is likely to resolve YES or NO. " +
+            "Estimate a confidence score (0-100): 50 = uncertain, >65 = lean YES, <35 = lean NO. " +
+            "Ground your analysis in the evidence provided. " +
+            "Output JSON only with fields: confidence (integer 0-100) and explanation (string, max 4 sentences).",
+          user_prompt: JSON.stringify({
+            market_question: marketQuestion,
+            tweet_text: tweetText || "(no tweet context)",
+            collected_evidence: sourceSummary,
+            source_counts: dossier.source_counts,
+          }, null, 2),
+          json_schema_hint: '{"confidence":50,"explanation":"string"}',
+          temperature: 0.2,
+          max_tokens: 280,
+        } as const;
+
+        const result = await model.generateJson<{ confidence?: unknown; explanation?: unknown }>(generationRequest);
+        const rawConf = Number(result.confidence);
+        thesis = {
+          confidence: Number.isFinite(rawConf) ? Math.max(0, Math.min(100, Math.round(rawConf))) : 50,
+          explanation: typeof result.explanation === "string" && result.explanation.trim()
+            ? result.explanation.trim()
+            : "No explanation generated.",
+        };
+        modelMode = "bedrock";
+      } else {
+        const tweetTokens = new Set((tweetText.toLowerCase().match(/\b[a-z]{3,}\b/g) ?? []));
+        const marketTokens = (marketQuestion.toLowerCase().match(/\b[a-z]{3,}\b/g) ?? []);
+        const STOP = new Set(["the", "and", "for", "that", "this", "will", "not", "are", "was", "have", "with", "from"]);
+        const overlap = marketTokens.filter(t => !STOP.has(t) && tweetTokens.has(t)).length;
+        const sourceCount = Object.values(dossier.source_counts as Record<string, number>).reduce((a, b) => a + b, 0);
+        const confidence = Math.min(65, 40 + overlap * 4 + Math.min(sourceCount, 5) * 2);
+        thesis = {
+          confidence,
+          explanation: sourceCount > 0
+            ? `Collected ${sourceCount} source(s). Heuristic token overlap: ${overlap} term(s) matched. No Bedrock model available for deeper analysis.`
+            : `No live sources collected and no Bedrock model available. Confidence is a heuristic estimate based on token overlap only.`,
+        };
+        modelMode = "heuristic";
+      }
+
+      debugLog(debugEnabled, "research-thesis", {
+        model_mode: modelMode,
+        market_id: marketId,
+        market_question: snippet(marketQuestion, 120),
+        tweet_context: snippet(tweetText, 120),
+        thesis_confidence: thesis.confidence,
+        source_counts: dossier.source_counts,
+        briefing_lines_count: briefingLines.length,
+      });
+
+      response.json({ thesis, model_mode: modelMode, dossier });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      response.status(500).json({ error: `Research thesis failed: ${message}` });
+    } finally {
+      try { if (existsSync(outputPath)) unlinkSync(outputPath); } catch { /* ignore cleanup errors */ }
     }
   });
 

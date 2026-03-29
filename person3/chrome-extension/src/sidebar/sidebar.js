@@ -33,11 +33,16 @@ function createSidebar() {
   sidebar.innerHTML = `
     <div class="im-tab-bar">
       <button class="im-tab active" data-tab="portfolio"><span>Portfolio</span></button>
+      <button class="im-tab" data-tab="markets"><span>Markets</span></button>
       <button class="im-tab" data-tab="saved"><span>Saved</span></button>
     </div>
 
     <div class="im-tab-content active" id="im-tab-portfolio">
       ${renderPortfolioTab()}
+    </div>
+
+    <div class="im-tab-content" id="im-tab-markets">
+      ${renderMarketsTab(IM_ACTIVE_MARKET_ID)}
     </div>
 
     <div class="im-tab-content" id="im-tab-saved">
@@ -764,8 +769,7 @@ function bindSidebarEvents() {
       try {
         await loadPolymarketMarketUniverse({ limit: 2200, pageSize: 500, maxPages: 6 });
         showToast('Live markets refreshed.');
-        rerenderPortfolioTabIfVisible();
-        rerenderSavedTabIfVisible();
+        rerenderMarketsTab();
       } catch {
         showToast('Refresh failed.');
       }
@@ -781,7 +785,7 @@ function bindSidebarEvents() {
         ...existing,
         showFullData: !existing.showFullData
       });
-      rerenderPortfolioTabIfVisible();
+      rerenderMarketsTab();
       return;
     }
 
@@ -862,6 +866,8 @@ function bindSidebarEvents() {
 
       if (tabName === 'portfolio') {
         content.innerHTML = renderPortfolioTab();
+      } else if (tabName === 'markets') {
+        content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
       } else if (tabName === 'saved') {
         content.innerHTML = renderSavedTab();
       }
@@ -869,6 +875,12 @@ function bindSidebarEvents() {
       content.classList.add('active');
     });
   });
+}
+
+function rerenderMarketsTab() {
+  const content = document.getElementById('im-tab-markets');
+  if (!content) return;
+  content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
 }
 
 function rerenderSavedTabIfVisible() {

@@ -3041,9 +3041,36 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+async function runResearchThesisForTweet({ tweetText, market, postUrl, postAuthor, postTimestamp } = {}) {
+  const endpoint = "http://localhost:8787/v1/research-thesis";
+  const body = {
+    tweet_text: typeof tweetText === "string" ? tweetText : "",
+    market: {
+      id: String(market?.id ?? ""),
+      question: String(market?.question ?? ""),
+      category: String(market?.category ?? ""),
+      yesOdds: market?.yesOdds ?? null,
+      noOdds: market?.noOdds ?? null,
+    },
+    post_url: typeof postUrl === "string" ? postUrl : "",
+    post_author: typeof postAuthor === "string" ? postAuthor : "",
+    post_timestamp: typeof postTimestamp === "string" ? postTimestamp : "",
+  };
+
+  const response = await fetchJsonWithExtensionSupport(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeoutMs: 30000,
+  });
+
+  return response;
+}
+
 if (typeof window !== "undefined") {
   window.loadPolymarketMarketUniverse = loadPolymarketMarketUniverse;
   window.warmExpandedMarketUniverse = warmExpandedMarketUniverse;
   window.getMarketUniverse = getMarketUniverse;
   window.getMarketById = getMarketById;
+  window.runResearchThesisForTweet = runResearchThesisForTweet;
 }
