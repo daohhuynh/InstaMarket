@@ -74,47 +74,127 @@
   }
 
   function alignDittoToTwitterButtons() {
-    const btn = document.getElementById("im-ditto-btn");
-    const modal = document.getElementById("im-ditto-modal");
-    if (!btn) return;
 
-    // Static positioning: Bottom right corner, safe from Twitter's dynamic DOM
-    btn.style.position = "fixed";
-    btn.style.right = "24px";
-    btn.style.bottom = "24px";
-    btn.style.width = "60px";
-    btn.style.height = "60px";
-    btn.style.zIndex = "99999";
+    const btn = document.getElementById('im-ditto-btn');
 
-    // Transparent button (Only the Pokemon is visible)
-    btn.style.backgroundColor = "transparent";
-    btn.style.border = "none";
-    btn.style.cursor = "pointer";
-    btn.style.display = "flex";
-    btn.style.alignItems = "center";
-    btn.style.justifyContent = "center";
+    const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
 
-    if (modal) {
-      modal.style.position = "fixed";
-      modal.style.right = "24px";
-      modal.style.bottom = "90px";
-      modal.style.zIndex = "100000";
+    if (!btn || !grokEl) return;
+
+
+
+    const grokRect = grokEl.getBoundingClientRect();
+
+    const btnSize = 56; // Standard size of Grok/Chat buttons
+
+    const gap = 16;     // Standard spacing
+
+
+
+    // We use RIGHT and BOTTOM to keep him locked to that corner
+
+    const rightOffset = window.innerWidth - grokRect.right;
+
+    const bottomOffset = (window.innerHeight - grokRect.top) + gap;
+
+
+
+    // !important on everything to crush that ghost box
+
+    btn.style.cssText = `
+
+      position: fixed !important;
+
+      right: ${rightOffset}px !important;
+
+      bottom: ${bottomOffset}px !important;
+
+      width: ${btnSize}px !important;
+
+      height: ${btnSize}px !important;
+
+      background: transparent !important;
+
+      background-color: transparent !important;
+
+      border: none !important;
+
+      box-shadow: none !important;
+
+      outline: none !important;
+
+      padding: 0 !important;
+
+      margin: 0 !important;
+
+      z-index: 999999 !important;
+
+      display: flex !important;
+
+      align-items: center !important;
+
+      justify-content: center !important;
+
+      cursor: pointer !important;
+
+    `;
+
+
+
+    // Make Ditto fill the space so he matches the button size
+
+    const img = btn.querySelector('img');
+
+    if (img) {
+
+      img.style.cssText = `
+
+        width: 56px !important;
+
+        height: 56px !important;
+
+        image-rendering: pixelated !important;
+
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4)) !important;
+
+      `;
+
     }
+
   }
 
-  // ── Ditto floating button ───────────────────────────────
+
+
   function mountDittoButton() {
-    if (document.getElementById("im-ditto-btn")) return;
-    const DITTO_IMG = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png`;
 
-    const btn = document.createElement("button");
-    btn.id = "im-ditto-btn";
-    btn.title = "Ditto — Find your trading tribe";
-    btn.innerHTML = `<img src="${DITTO_IMG}" alt="Ditto" style="width:54px;height:54px;image-rendering:pixelated;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">`;
+    if (document.getElementById('im-ditto-btn')) return;
 
-    btn.addEventListener("click", toggleDittoModal);
+    const btn = document.createElement('button');
+
+    btn.id = 'im-ditto-btn';
+
+    btn.innerHTML = `<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto">`;
+
     document.body.appendChild(btn);
+
+
+
+    // Initial alignment
+
     alignDittoToTwitterButtons();
+
+
+
+    // Re-align whenever the window moves or resizes
+
+    window.addEventListener('resize', alignDittoToTwitterButtons);
+
+    window.addEventListener('scroll', alignDittoToTwitterButtons, true);
+
+    
+
+    btn.addEventListener('click', toggleDittoModal);
+
   }
 
   function observeTwitterPanels() {
