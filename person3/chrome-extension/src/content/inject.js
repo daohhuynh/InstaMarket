@@ -74,111 +74,47 @@
   }
 
   function alignDittoToTwitterButtons() {
-    function attempt() {
-      const grokEl = document.querySelector('[data-testid="GrokDrawer"]');
-      const chatEl =
-        document.querySelector('[data-testid="DMDrawer"]') ||
-        document
-          .querySelector(
-            '[data-testid="FloatingActionButtons"] a[href*="messages"]',
-          )
-          ?.closest("[style]");
+    const btn = document.getElementById("im-ditto-btn");
+    const modal = document.getElementById("im-ditto-modal");
+    if (!btn) return;
 
-      if (!grokEl) return false;
+    // Static positioning: Bottom right corner, safe from Twitter's dynamic DOM
+    btn.style.position = "fixed";
+    btn.style.right = "24px";
+    btn.style.bottom = "24px";
+    btn.style.width = "60px";
+    btn.style.height = "60px";
+    btn.style.zIndex = "99999";
 
-      const grokRect = grokEl.getBoundingClientRect();
-      const chatRect = chatEl ? chatEl.getBoundingClientRect() : null;
+    // Transparent button (Only the Pokemon is visible)
+    btn.style.backgroundColor = "transparent";
+    btn.style.border = "none";
+    btn.style.cursor = "pointer";
+    btn.style.display = "flex";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
 
-      const btn = document.getElementById("im-ditto-btn");
-      const modal = document.getElementById("im-ditto-modal");
-      if (!btn) return false;
-
-      const btnSize = grokRect.width; // Usually 56px
-
-      // Calculate the exact gap Twitter uses between its buttons
-      let gap = 16;
-      if (chatRect && grokRect.bottom < chatRect.top) {
-        gap = chatRect.top - grokRect.bottom;
-      }
-
-      // Use LEFT and TOP for absolute precision (ignores scrollbar weirdness)
-      const dittoLeft = grokRect.left;
-      const dittoTop = grokRect.top - btnSize - gap;
-
-      btn.style.position = "fixed";
-      btn.style.left = dittoLeft + "px";
-      btn.style.top = dittoTop + "px";
-      btn.style.width = btnSize + "px";
-      btn.style.height = btnSize + "px";
-
-      // Remove the box completely
-      btn.style.backgroundColor = "transparent";
-      btn.style.border = "none";
-      btn.style.boxShadow = "none";
-      btn.style.outline = "none";
-      btn.style.cursor = "pointer";
-      btn.style.display = "flex";
-      btn.style.alignItems = "center";
-      btn.style.justifyContent = "center";
-      btn.style.padding = "0";
-      btn.style.margin = "0";
-      btn.style.zIndex = "9999";
-
-      // Add a native-feeling hover effect to the Pokemon
-      btn.style.transition = "transform 0.15s ease-in-out";
-      btn.onmouseover = () => (btn.style.transform = "scale(1.15)");
-      btn.onmouseout = () => (btn.style.transform = "scale(1)");
-
-      if (modal) {
-        // Anchor the modal right next to Ditto
-        modal.style.right = window.innerWidth - dittoLeft + 16 + "px";
-        modal.style.bottom = window.innerHeight - dittoTop - btnSize + "px";
-      }
-      return true;
-    }
-
-    if (!attempt()) {
-      let tries = 0;
-      const interval = setInterval(() => {
-        if (attempt() || ++tries > 25) clearInterval(interval);
-      }, 500);
+    if (modal) {
+      modal.style.position = "fixed";
+      modal.style.right = "24px";
+      modal.style.bottom = "90px";
+      modal.style.zIndex = "100000";
     }
   }
 
   // ── Ditto floating button ───────────────────────────────
   function mountDittoButton() {
     if (document.getElementById("im-ditto-btn")) return;
-
     const DITTO_IMG = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png`;
 
     const btn = document.createElement("button");
     btn.id = "im-ditto-btn";
     btn.title = "Ditto — Find your trading tribe";
+    btn.innerHTML = `<img src="${DITTO_IMG}" alt="Ditto" style="width:54px;height:54px;image-rendering:pixelated;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">`;
 
-    // Scale the sprite up to fill the invisible button area
-    btn.innerHTML = `
-          <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-            <img src="${DITTO_IMG}" alt="Ditto" style="width:50px;height:50px;image-rendering:pixelated;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
-          </div>`;
     btn.addEventListener("click", toggleDittoModal);
     document.body.appendChild(btn);
-
-    // Snap Ditto's right/bottom to match Twitter's top floating button exactly
     alignDittoToTwitterButtons();
-
-    const modal = document.createElement("div");
-    modal.id = "im-ditto-modal";
-    modal.innerHTML = renderDittoModal();
-    document.body.appendChild(modal);
-
-    const closeBtn = modal.querySelector(".im-ditto-close");
-    closeBtn?.addEventListener("click", () => {
-      modal.classList.remove("open");
-    });
-
-    observeTwitterPanels();
-    updateDittoVisibility();
-    watchSidebarForDitto();
   }
 
   function observeTwitterPanels() {
