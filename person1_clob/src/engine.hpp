@@ -73,6 +73,37 @@ public:
             own_book[price].orders.emplace_back(std::move(o));
         }
     }
+
+    inline std::string get_depth_json() const {
+        std::string res = "{\"yes\":[";
+        bool first = true;
+        for (int p = 99; p >= 1; --p) {
+            uint64_t v = 0;
+            for (size_t i = yes_book[p].head; i < yes_book[p].orders.size(); ++i) {
+                v += yes_book[p].orders[i].quantity;
+            }
+            if (v > 0) {
+                if (!first) res += ",";
+                res += "{\"price\":" + std::to_string(p) + ",\"volume\":" + std::to_string(v) + "}";
+                first = false;
+            }
+        }
+        res += "],\"no\":[";
+        first = true;
+        for (int p = 99; p >= 1; --p) {
+            uint64_t v = 0;
+            for (size_t i = no_book[p].head; i < no_book[p].orders.size(); ++i) {
+                v += no_book[p].orders[i].quantity;
+            }
+            if (v > 0) {
+                if (!first) res += ",";
+                res += "{\"price\":" + std::to_string(p) + ",\"volume\":" + std::to_string(v) + "}";
+                first = false;
+            }
+        }
+        res += "]}";
+        return res;
+    }
 }; // <-- FIXED: You were missing this closing brace and semicolon!
 
 class Engine {
@@ -98,5 +129,12 @@ public:
         if (market_id < markets.size()) {
             markets[market_id].resolve_market(winning_side);
         }
+    }
+
+    inline std::string get_market_depth_json(const uint64_t market_id) const {
+        if (market_id < markets.size()) {
+            return markets[market_id].get_depth_json();
+        }
+        return "{\"yes\":[],\"no\":[]}";
     }
 };

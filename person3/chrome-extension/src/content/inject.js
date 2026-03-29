@@ -832,6 +832,22 @@
         console.warn("[InstaMarket] Simulation fetch failed:", err);
       }
 
+      // Fetch order book snapshot from CLOB (swarm always trades into market slot 1)
+      // Wait briefly so all CLOB submissions have settled
+      let orderBook = null;
+      try {
+        await new Promise(r => setTimeout(r, 1500));
+        const obReq = await fetch("http://localhost:3000/api/orderbook/1");
+        if (obReq.ok) {
+          const obData = await obReq.json();
+          if (Array.isArray(obData.yes) || Array.isArray(obData.no)) {
+            orderBook = obData;
+          }
+        }
+      } catch (err) {
+        console.warn("[InstaMarket] Order book fetch failed (non-fatal):", err);
+      }
+
       stopLoadingUpdates();
       persistResearch(market.id, {
         type: 'thesis',
@@ -857,6 +873,7 @@
           all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
         },
         simulation: simData,
+        orderBook,
         showFullData: false
       });
       focusSidebarOnPortfolioForResearch(market.id);

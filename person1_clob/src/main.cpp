@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <cstring>
+#include <charconv>
 
 int main() {
     Engine engine;
@@ -38,6 +39,24 @@ int main() {
             std::string_view chunk(read_buffer.data(), bytes_read);
             
             size_t body_pos = chunk.find("\r\n\r\n");
+            
+            if (chunk.size() >= 29 && chunk.substr(0, 29) == "GET /api/orderbook?market_id=") {
+                size_t id_start = 29;
+                size_t id_end = chunk.find(' ', id_start);
+                if (id_end != std::string_view::npos) {
+                    uint64_t m_id = 0;
+                    std::from_chars(chunk.data() + id_start, chunk.data() + id_end, m_id);
+                    std::string json = engine.get_market_depth_json(m_id);
+                    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(json.size()) + "\r\n\r\n" + json;
+                    write(client_socket, response.c_str(), response.size());
+                } else {
+                    const char* err = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+                    write(client_socket, err, strlen(err));
+                }
+                close(client_socket);
+                continue;
+            }
+
             if (body_pos != std::string_view::npos) {
                 chunk.remove_prefix(body_pos + 4);
             }

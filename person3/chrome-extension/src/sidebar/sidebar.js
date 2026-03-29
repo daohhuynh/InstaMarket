@@ -501,6 +501,8 @@ function renderThesisCard(research) {
     marketId,
   }) : ''}
       
+      ${renderOrderBook(research.orderBook, research.simulation)}
+      
       ${renderSimulationData(research.simulation)}
       
     </div>
@@ -1061,6 +1063,18 @@ function bindSidebarEvents() {
       return;
     }
   });
+
+  // CLOB order book animation — fires when user expands the details element
+  sidebar.addEventListener('toggle', event => {
+    const el = event.target;
+    if (!el || !el.classList.contains('im2-ob-details') || !el.open) return;
+    const id = el.id;
+    if (id && CLOB_ANIM[id]) {
+      const decisions = CLOB_ANIM[id];
+      delete CLOB_ANIM[id]; // play once, then auto-free
+      playOrderBookAnimation(id, decisions);
+    }
+  }, true); // capture phase so toggle fires on the element directly
 
   sidebar.addEventListener('keydown', event => {
     const target = event.target?.closest?.('[data-im-action="open-bet-post"], [data-im-action="open-saved-post"], [data-im-action="open-market-link"], [data-im-action="open-source-link"]');
@@ -1760,6 +1774,171 @@ function switchSidebarToSaved() {
     savedContent.innerHTML = renderSavedTab();
   }
 }
+// ── CLOB Animation Engine ─────────────────────────────────────
+const CLOB_ANIM = {}; // obId -> decisions []
+
+function buildClobEvents(decisions) {
+  // Reconstruct what the CLOB engine would have done step-by-step
+  const yesBook = {}; // price -> volume
+  const noBook = {};
+  const events = [];
+
+  for (const d of decisions) {
+    const price = d.decision === 'YES' ? d.confidence : 100 - d.confidence;
+    const qty = d.shares || 1;
+    const oppPrice = 100 - price;
+    let remaining = qty;
+    let matched = false;
+
+    if (d.decision === 'YES') {
+      for (let p = 1; p <= oppPrice && remaining > 0; p++) {
+        if (noBook[p] > 0) {
+          const fill = Math.min(remaining, noBook[p]);
+          noBook[p] -= fill;
+          remaining -= fill;
+          if (noBook[p] <= 0) delete noBook[p];
+          matched = true;
+        }
+      }
+      if (remaining > 0) yesBook[price] = (yesBook[price] || 0) + remaining;
+    } else {
+      for (let p = 1; p <= oppPrice && remaining > 0; p++) {
+        if (yesBook[p] > 0) {
+          const fill = Math.min(remaining, yesBook[p]);
+          yesBook[p] -= fill;
+          remaining -= fill;
+          if (yesBook[p] <= 0) delete yesBook[p];
+          matched = true;
+        }
+      }
+      if (remaining > 0) noBook[price] = (noBook[price] || 0) + remaining;
+    }
+
+    events.push({
+      agent: d,
+      price,
+      qty,
+      matched,
+      yes: { ...yesBook },
+      no: { ...noBook },
+    });
+  }
+  return events;
+}
+
+function renderClobFrame(canvasEl, event, stepIdx, total) {
+  const { yes, no, agent, price, matched } = event;
+  const isYes = agent.decision === 'YES';
+
+  // Build sorted price levels (top 7 each, highest price first)
+  const yesLevels = Object.entries(yes).map(([p, v]) => ({ price: +p, volume: +v })).sort((a, b) => b.price - a.price).slice(0, 7);
+  const noLevels = Object.entries(no).map(([p, v]) => ({ price: +p, volume: +v })).sort((a, b) => b.price - a.price).slice(0, 7);
+  const maxVol = Math.max(1, ...yesLevels.map(l => l.volume), ...noLevels.map(l => l.volume));
+
+  const bar = (level, side) => {
+    const pct = Math.round((level.volume / maxVol) * 100);
+    const highlight = level.price === price && !matched ? 'im2-ob-bar-new' : '';
+    return `<div class="im2-ob-level">
+      <span class="im2-ob-price">${level.price}c</span>
+      <div class="im2-ob-bar-track">
+        <div class="im2-ob-bar-fill im2-ob-bar--${side} ${highlight}" style="width:${pct}%"></div>
+      </div>
+      <span class="im2-ob-vol">${level.volume}</span>
+    </div>`;
+  };
+
+  const totalLiq = Object.values(yes).reduce((s, v) => s + v, 0) + Object.values(no).reduce((s, v) => s + v, 0);
+
+  canvasEl.innerHTML = `
+    <div class="im2-ob-ticker ${matched ? 'im2-ob-ticker--match' : (isYes ? 'im2-ob-ticker--yes' : 'im2-ob-ticker--no')}">
+      <span class="im2-ob-ticker-name">${escapeHtml(agent.name)}</span>
+      <span class="im2-ob-ticker-action">${matched ? '⚡ MATCHED' : (isYes ? '▲ BID YES' : '▼ ASK NO')} @ ${price}c × ${agent.shares || 1}</span>
+      <span class="im2-ob-ticker-step">${stepIdx + 1}/${total}</span>
+    </div>
+    <div class="im2-ob-cols">
+      <div class="im2-ob-col">
+        <div class="im2-ob-col-header im2-ob-col-header--yes">YES BIDS</div>
+        ${yesLevels.length ? yesLevels.map(l => bar(l, 'yes')).join('') : '<div class="im2-ob-empty-col">—</div>'}
+      </div>
+      <div class="im2-ob-divider"></div>
+      <div class="im2-ob-col">
+        <div class="im2-ob-col-header im2-ob-col-header--no">NO ASKS</div>
+        ${noLevels.length ? noLevels.map(l => bar(l, 'no')).join('') : '<div class="im2-ob-empty-col">—</div>'}
+      </div>
+    </div>
+    <div class="im2-ob-footer">
+      <span class="im2-ob-footer-label">Liquidity</span>
+      <span class="im2-ob-footer-val">${totalLiq} shares</span>
+      <span class="im2-ob-footer-label" style="margin-left:8px;">Open Orders</span>
+      <span class="im2-ob-footer-val">${Object.keys(yes).length + Object.keys(no).length} levels</span>
+    </div>`;
+}
+
+function playOrderBookAnimation(obId, decisions) {
+  const details = document.getElementById(obId);
+  if (!details) return;
+  const canvas = details.querySelector('.im2-ob-canvas');
+  if (!canvas) return;
+
+  const events = buildClobEvents(decisions);
+  if (!events.length) {
+    canvas.innerHTML = '<div class="im2-ob-empty">No agent decisions to replay.</div>';
+    return;
+  }
+
+  let step = 0;
+  canvas.innerHTML = '<div class="im2-ob-empty" style="padding:16px 0;">▶ Replaying swarm orders…</div>';
+
+  function tick() {
+    if (step >= events.length) {
+      // Final state — show a "done" badge
+      const footer = canvas.querySelector('.im2-ob-footer');
+      if (footer) {
+        const done = document.createElement('span');
+        done.className = 'im2-ob-done-badge';
+        done.textContent = '✓ Complete';
+        footer.appendChild(done);
+      }
+      return;
+    }
+    renderClobFrame(canvas, events[step], step, events.length);
+    step++;
+    setTimeout(tick, 420);
+  }
+  tick();
+}
+
+function renderOrderBook(ob, sim) {
+  const hasSim = sim && Array.isArray(sim.decisions) && sim.decisions.length > 0;
+  const yesSnap = Array.isArray(ob?.yes) ? ob.yes : [];
+  const noSnap = Array.isArray(ob?.no) ? ob.no : [];
+  const hasSnap = yesSnap.length > 0 || noSnap.length > 0;
+
+  if (!hasSim && !hasSnap) return '';
+
+  const obId = `im2-ob-${Date.now()}`;
+  const label = hasSim ? `${sim.decisions.length} agents · click to replay` : `${yesSnap.length} YES · ${noSnap.length} NO levels`;
+
+  // Store decisions for the toggle handler
+  if (hasSim) CLOB_ANIM[obId] = sim.decisions;
+
+  return `
+    <div class="im2-sep" style="margin: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);"></div>
+    <details class="im2-ob-details" id="${obId}">
+      <summary class="im2-ob-summary">
+        <span class="im2-ob-title">
+          <span class="im2-ob-icon">📊</span>
+          CLOB MARKET DEPTH
+        </span>
+        <span class="im2-ob-meta">${label}</span>
+        <span class="im2-ob-chevron">▾</span>
+      </summary>
+      <div class="im2-ob-body">
+        <div class="im2-ob-canvas"></div>
+      </div>
+    </details>`;
+}
+
 function renderSimulationData(sim) {
   if (!sim || !sim.decisions) return '';
 

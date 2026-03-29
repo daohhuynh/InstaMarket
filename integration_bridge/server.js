@@ -265,6 +265,7 @@ async function submitToCLOB(decisions) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          market_id: 1,
           persona_id: d.id,
           side: d.decision === "YES" ? 1 : 0,
           price: d.decision === "YES" ? d.confidence : 100 - d.confidence,
@@ -274,6 +275,32 @@ async function submitToCLOB(decisions) {
     ),
   );
 }
+
+app.get("/api/orderbook/:marketId", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  try {
+    const marketId = parseInt(req.params.marketId, 10);
+    if (isNaN(marketId)) {
+      return res.status(400).json({ error: "Invalid market ID", yes: [], no: [] });
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch(
+      `http://localhost:8080/api/orderbook?market_id=${marketId}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    if (!response.ok) {
+      return res.json({ yes: [], no: [], error: "CLOB returned non-OK status" });
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    // Fail gracefully — CLOB may not be running
+    console.warn("Orderbook fetch error (non-fatal):", err.message);
+    res.json({ yes: [], no: [] });
+  }
+});
 
 // --- ENDPOINT: /api/persona-sim ---
 // Runs one Nova Lite call per persona (10 total) per request; parallel with per-call timeouts.
