@@ -40,7 +40,7 @@ export class BedrockNovaLiteModel implements LanguageModel {
     }
 
     const jsonPayload = extractJsonPayload(text);
-    return JSON.parse(jsonPayload) as T;
+    return parseJsonWithRepairs<T>(jsonPayload);
   }
 
   private buildUserContentBlocks(request: JsonGenerationRequest): ContentBlock[] {
@@ -126,4 +126,68 @@ export function extractJsonPayload(modelText: string): string {
   }
 
   throw new Error(`No JSON object found in model response: ${trimmed.slice(0, 200)}`);
+}
+
+function parseJsonWithRepairs<T>(jsonPayload: string): T {
+  const attempts = buildJsonRepairCandidates(jsonPayload);
+  let lastError: unknown = null;
+
+  for (const candidate of attempts) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to parse model JSON.");
+}
+
+function buildJsonRepairCandidates(jsonPayload: string): string[] {
+  const raw = String(jsonPayload || "").trim();
+  const normalizedNewlines = raw.replace(/\r\n/g, "\n");
+  const sanitizedControls = normalizedNewlines.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ");
+  const repaired = repairUnescapedNewlinesInsideStrings(sanitizedControls);
+
+  return [...new Set([
+    raw,
+    normalizedNewlines,
+    sanitizedControls,
+    repaired,
+  ].filter(Boolean))];
+}
+
+function repairUnescapedNewlinesInsideStrings(value: string): string {
+  let result = "";
+  let inString = false;
+  let escaping = false;
+
+  for (const char of value) {
+    if (escaping) {
+      result += char;
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaping = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      result += char;
+      inString = !inString;
+      continue;
+    }
+
+    if (inString && (char === "\n" || char === "\r")) {
+      result += "\\n";
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
 }

@@ -1,3 +1,4 @@
+import { HeuristicLocalModel } from "../bedrock/HeuristicLocalModel.js";
 import type { LanguageModel } from "../bedrock/LanguageModel.js";
 import { formatResearchDossierForPrompt } from "../contracts/researchDossier.js";
 import { loadAnalystSkills } from "./skillsLoader.js";
@@ -26,7 +27,11 @@ export type ThesisProgressEvent =
   | { type: "agent_done"; agent: string; message: string };
 
 export class ThesisEngine {
-  constructor(private readonly model: LanguageModel) {}
+  private readonly fallbackModel: LanguageModel;
+
+  constructor(private readonly model: LanguageModel, fallbackModel: LanguageModel = new HeuristicLocalModel()) {
+    this.fallbackModel = fallbackModel;
+  }
 
   async buildThesis(input: ThesisBuildInput, onEvent?: (event: ThesisProgressEvent) => void): Promise<ThesisJson> {
     const skills = await loadAnalystSkills();
@@ -155,6 +160,11 @@ export class ThesisEngine {
       } catch (error) {
         lastError = error;
       }
+    }
+    try {
+      return await this.fallbackModel.generateJson<T>(request);
+    } catch (fallbackError) {
+      lastError = fallbackError;
     }
     throw lastError instanceof Error ? lastError : new Error("Model generation failed.");
   }

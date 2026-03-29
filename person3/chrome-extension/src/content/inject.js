@@ -1,5 +1,5 @@
-// ============================================================
-// INJECT.JS – entry point, injects tweet layers + sidebar
+﻿// ============================================================
+// INJECT.JS â€“ entry point, injects tweet layers + sidebar
 // ============================================================
 
 (function () {
@@ -15,7 +15,7 @@
   let imViewportSyncRaf = 0;
   let imLastViewportMarketId = '';
 
-  // ── Wait for DOM ready ──────────────────────────────────────────
+  // â”€â”€ Wait for DOM ready â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function init() {
     await hydrateMarketUniverse();
 
@@ -34,7 +34,7 @@
     }
   }
 
-  // ── Sidebar ─────────────────────────────────────────────────────────────────────────────────
+  // â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function mountSidebar(site = IM_SITE) {
     if (sidebarMounted) return;
     sidebarMounted = true;
@@ -94,7 +94,7 @@
     document.body?.classList.toggle('im-sidebar-hidden', collapsed);
   }
 
-  // ── Tweet observation ────────────────────────────────────────────────
+  // â”€â”€ Tweet observation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function observeTweets() {
     const observer = new MutationObserver(() => {
       document.querySelectorAll('article[data-testid="tweet"]:not([data-im-injected])').forEach(tweet => {
@@ -115,7 +115,15 @@
 
     const tweetText = tweet.innerText;
     const tweetContext = extractTweetContext(tweet);
-    const match = await findBestMarketForTweetWithAi(tweetText);
+    let match = null;
+    try {
+      match = await findBestMarketForTweetWithAi(tweetText);
+    } catch (error) {
+      console.warn('[InstaMarket] AI match failed, trying local fallback:', error);
+    }
+    if (!match) {
+      match = findRenderableLocalMatch(tweetText);
+    }
     if (!match) return;
     const market = match.market;
     const marketId = String(market.id);
@@ -384,7 +392,7 @@
     );
   }
 
-  // ── Viewport market sync ─────────────────────────────────────────────
+  // â”€â”€ Viewport market sync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function requestViewportMarketSync() {
     if (imViewportSyncRaf) return;
     imViewportSyncRaf = window.requestAnimationFrame(() => {
@@ -441,7 +449,7 @@
     window.setSidebarActiveMarketFromViewport(bestMarketId);
   }
 
-  // ── Washington Post ──────────────────────────────────────────────────
+  // â”€â”€ Washington Post â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function observeWashingtonPostArticle() {
     const observer = new MutationObserver(() => {
       maybeInjectWashingtonPostArticle().catch(error => {
@@ -483,7 +491,15 @@
     const { articleRoot, articleText } = articleContext;
     articleRoot.dataset.imInjected = 'pending';
     try {
-      const match = await findBestMarketForTweetWithAi(articleText);
+      let match = null;
+      try {
+        match = await findBestMarketForTweetWithAi(articleText);
+      } catch (error) {
+        console.warn('[InstaMarket] AI article match failed, trying local fallback:', error);
+      }
+      if (!match) {
+        match = findRenderableLocalMatch(articleText);
+      }
       if (!match || !match.market) {
         articleRoot.dataset.imInjected = 'no-match';
         return;
@@ -532,10 +548,10 @@
     card.id = 'im-wapo-inline-card';
     card.className = 'im-wapo-inline-card';
     card.innerHTML = `
-      <div class="im-wapo-inline-kicker">InstaMarket Signal</div>
+      <div class="im-wapo-inline-kicker">Relevant Market</div>
       <div class="im-wapo-inline-shell">
         <div class="im-wapo-inline-meta">
-          <span class="im-wapo-inline-label">Relevant Bet</span>
+          <span class="im-wapo-inline-label">Market Match</span>
         </div>
         <div class="im-market-shell im-wapo-market-shell">
           <div class="im-market-header">
@@ -698,7 +714,7 @@
     syncWashingtonPostInlineCardLayout(card, headerBlock);
   }
 
-  // ── Shared UI helpers ────────────────────────────────────────────────
+  // â”€â”€ Shared UI helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function bindTradeAmountControls(layer) {
     const amountInput = layer.querySelector('.im-amount-input');
     const amountPill = layer.querySelector('.im-amount-pill');
@@ -774,11 +790,11 @@
     if (event.type === 'scraper_source') return event.message;
     if (event.type === 'scraper_done') return event.message;
     if (event.type === 'agent_start') return event.message;
-    if (event.type === 'agent_done') return null; // suppress — the _start already showed it
+    if (event.type === 'agent_done') return null; // suppress â€” the _start already showed it
     return null;
   }
 
-  // ── Research (tweets) ────────────────────────────────────────────────
+  // â”€â”€ Research (tweets) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function runLiveResearch({ market, tweet, tweetText, fallbackResearchSummary }) {
     const context = extractTweetContext(tweet);
     const completedSteps = [];
@@ -950,7 +966,7 @@
     }
   }
 
-  // ── Research (WaPo / context-based) ─────────────────────────────────
+  // â”€â”€ Research (WaPo / context-based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function runLiveResearchForContext({ market, contentText, context, fallbackResearchSummary }) {
     const completedSteps = [];
     let currentStep = 'Initialising research pipeline...';
@@ -1039,10 +1055,10 @@
       showFullData: false
     });
     switchSidebarToMarkets(market.id);
-    showToast(`Research ready: "${market.question.slice(0, 40)}…"`);
+    showToast(`Research ready: "${market.question.slice(0, 40)}â€¦"`);
   }
 
-  // ── Site detection + WaPo helpers ───────────────────────────────────
+  // â”€â”€ Site detection + WaPo helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function detectSite() {
     const hostname = window.location.hostname.toLowerCase();
     if (hostname === 'twitter.com' || hostname === 'www.twitter.com' || hostname === 'x.com' || hostname === 'www.x.com') {
@@ -1151,6 +1167,63 @@
     };
   }
 
+  function findRenderableLocalMatch(text) {
+    if (typeof rankMarketCandidates !== 'function') {
+      return null;
+    }
+
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) {
+      return null;
+    }
+
+    if (typeof classifyTweetSignalLevel === 'function') {
+      try {
+        if (classifyTweetSignalLevel(normalizedText, []) === 0) {
+          return null;
+        }
+      } catch {
+        // Ignore classifier failures and let local ranking try.
+      }
+    }
+
+    const ranked = rankMarketCandidates(normalizedText, 8);
+    const best = Array.isArray(ranked) ? ranked[0] : null;
+    if (!best?.market) {
+      return null;
+    }
+
+    const score = Number(best.score) || 0;
+    const questionOverlap = Number(best.questionTokenOverlap) || 0;
+    const ngramHits = Number(best.ngramHits) || 0;
+    const distinctMatches = new Set([...(best.exactMatches || []), ...(best.tokenMatches || [])]).size;
+
+    if (score < 7 && questionOverlap < 1 && ngramHits < 1 && distinctMatches < 2) {
+      return null;
+    }
+
+    const confidence = Math.max(
+      40,
+      Math.min(
+        72,
+        Math.round(34 + score * 1.9 + questionOverlap * 4 + ngramHits * 5 + distinctMatches * 2),
+      ),
+    );
+
+    return {
+      market: best.market,
+      score,
+      confidence,
+      exactMatches: Array.isArray(best.exactMatches) ? best.exactMatches : [],
+      tokenMatches: Array.isArray(best.tokenMatches) ? best.tokenMatches : [],
+      reasons: [
+        ...(Array.isArray(best.reasons) ? best.reasons : []),
+        'Rendered from local parser fallback while AI/network matching was unavailable.',
+      ],
+      source: 'parser-fallback',
+    };
+  }
+
   function normalizeToAbsoluteUrl(value) {
     if (!value) return '';
     try {
@@ -1187,7 +1260,7 @@
     }
   }
 
-  // ── Boot ─────────────────────────────────────────────────────────────────────────────────────
+  // â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       init().catch(error => console.error('[InstaMarket] Init failed:', error));
