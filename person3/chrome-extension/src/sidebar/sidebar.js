@@ -464,10 +464,9 @@ function renderThesisCard(research) {
           <span class="im2-stop-icon">◎</span>
           <span class="im2-stop-text">Stop loss: <span class="im2-stop-val">${maxStopLoss}c</span></span>
         </div>
-        ${suggestedAction === 'SKIP'
-          ? `<button class="im2-cta-btn im2-cta-btn--skip" disabled>Model suggests SKIP</button>`
-          : `<button class="im2-cta-btn im2-cta-btn--active" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">Place Bet ${escapeHtml(suggestedAction)}</button>`
-        }
+        <button class="im2-cta-btn im2-cta-btn--active" data-im-action="research-place-bet" data-market-id="${escapeHtml(marketId)}">
+          Place Bet${suggestedAction === 'SKIP' ? ' (Model says SKIP)' : ` ${escapeHtml(suggestedAction)}`}
+        </button>
         ${market?.polymarketUrl ? `<a class="im2-poly-link" href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer">↗ Open on Polymarket</a>` : ''}
       </div>
 
@@ -1012,14 +1011,16 @@ function bindSidebarEvents() {
         price: Number(pricePct.toFixed(2))
       };
 
-      try {
-        await submitBetToBridge(payload);
-        const recorded = recordSidebarBet(marketId, side, amount);
-        if (recorded) rerenderPortfolioTabIfVisible();
-        showToast(`Executed ${side} bet for $${amount.toFixed(2)}`);
-      } catch {
-        showToast('Bet API failed.');
+      // Keep research trade UX responsive: record immediately, then try bridge sync.
+      const recorded = recordSidebarBet(marketId, side, amount);
+      if (recorded) {
+        rerenderPortfolioTabIfVisible();
       }
+      showToast(`Executed ${side} bet for $${amount.toFixed(2)}`);
+
+      submitBetToBridge(payload).catch(error => {
+        console.warn('[InstaMarket] Bridge bet sync failed (kept local):', error);
+      });
       return;
     }
   });
