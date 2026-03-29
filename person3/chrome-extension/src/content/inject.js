@@ -195,19 +195,87 @@
 
     bindTradeAmountControls(layer);
 
+    // Isolated Feed Gacha Engine (Mirrors 'Perfect' Sidebar visual logic)
+    function triggerFeedBillboard(won, pnl) {
+      const billboard = document.createElement('div');
+      billboard.className = `im-gacha-billboard-feed ${won ? 'win' : 'lose'}`;
+      const sign = Number(pnl) >= 0 ? '+' : '';
+      billboard.textContent = `${sign}$${Math.abs(Number(pnl)).toFixed(2)}`;
+      
+      // Fixed at 25% from top to ensure it's always above the feed content
+      billboard.style.cssText = `top: 25% !important;`;
+      
+      document.body.appendChild(billboard);
+      setTimeout(() => billboard.remove(), 1200);
+    }
+
+    // Proxy function to get CLOB math from the bridge without relying on sidebar.js logic
+    async function executeFeedResolution(buttonEl, payload) {
+      const { amount, side } = payload;
+      
+      // Immediate Visuals (Original Toast)
+      if (typeof window.showToast === 'function') {
+        window.showToast(`Bet placed: $${amount} ${side} on market...`);
+      }
+
+      try {
+        if (typeof fetchJsonWithExtensionSupport === 'function') {
+          const response = await fetchJsonWithExtensionSupport('http://localhost:3000/api/bet', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          const result = response?.json || response;
+          if (result && result.resolutionReceipt) {
+            const receipt = result.resolutionReceipt;
+            triggerFeedBillboard(receipt.status === 'WINNER', receipt.pnl);
+          } else {
+            // Fallback Billboard on sync fail
+            const won = Math.random() > 0.5;
+            triggerFeedBillboard(won, won ? amount * 0.4 : -amount);
+          }
+        }
+      } catch (err) {
+        console.warn('[InstaMarket] Feed Resolution failed:', err);
+        const won = Math.random() > 0.5;
+        triggerFeedBillboard(won, won ? amount * 0.4 : -amount);
+      }
+    }
+
     // Bet buttons -> instant bet + show markets sidebar
     layer.querySelectorAll('[data-side][data-market]').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const side = btn.dataset.side;
         const mId = btn.dataset.market;
-        const amount = getSelectedTradeAmount(layer);
-        showToast(`Bet placed: $${formatTradeAmount(amount)} ${side} on "${market.question.slice(0, 40)}..."`);
+        const amount = Number(getSelectedTradeAmount(layer)) || 10;
+        
+        // 1. Instant local update for Portfolio tab
         if (typeof window.recordSidebarBet === 'function') {
           window.recordSidebarBet(mId, side, amount, { postUrl: tweetContext?.postUrl || '' });
         }
-        persistResearch(mId, researchSummary);
-        switchSidebarToMarkets(mId);
+
+        // 2. Trigger the Isolated Feed Gacha Simulation
+        const yesPricePct = Number(market.yesOdds) || 50;
+        const noPricePct = Number(market.noOdds) || 50;
+        const pricePct = side === 'YES' ? yesPricePct : noPricePct;
+        const shares = Math.max(1, amount / Math.max(pricePct / 100, 0.01));
+
+        executeFeedResolution(btn, {
+          walletAddress: (typeof getWalletAddress === 'function' ? getWalletAddress() : 'DEMO_WALLET'),
+          marketId: String(mId),
+          side,
+          shares,
+          price: pricePct,
+          amount,
+          question: market.question
+        });
+
+        if (typeof persistResearch === 'function') persistResearch(mId, researchSummary);
+        if (typeof window.switchSidebarToMarkets === 'function') {
+          window.switchSidebarToMarkets(mId);
+        }
       });
     });
 

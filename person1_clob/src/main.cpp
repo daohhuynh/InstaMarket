@@ -39,38 +39,52 @@ int main() {
             std::string_view chunk(read_buffer.data(), bytes_read);
             
             size_t body_pos = chunk.find("\r\n\r\n");
-            
-            if (chunk.size() >= 29 && chunk.substr(0, 29) == "GET /api/orderbook?market_id=") {
-                size_t id_start = 29;
-                size_t id_end = chunk.find(' ', id_start);
-                if (id_end != std::string_view::npos) {
-                    uint64_t m_id = 0;
-                    std::from_chars(chunk.data() + id_start, chunk.data() + id_end, m_id);
-                    std::string json = engine.get_market_depth_json(m_id);
-                    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(json.size()) + "\r\n\r\n" + json;
-                    write(client_socket, response.c_str(), response.size());
-                } else {
-                    const char* err = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-                    write(client_socket, err, strlen(err));
-                }
+            std::string_view head = chunk.substr(0, body_pos);
+            std::string_view body = (body_pos != std::string_view::npos) ? chunk.substr(body_pos + 4) : "";
+
+            if (head.find("GET /api/orderbook?market_id=") != std::string_view::npos) {
+                size_t id_start = head.find("market_id=") + 10;
+                size_t id_end = head.find(' ', id_start);
+                uint64_t m_id = 0;
+                try {
+                    m_id = std::stoull(std::string(head.substr(id_start, id_end - id_start)));
+                } catch (...) {}
+                std::string json = engine.get_market_depth_json(m_id);
+                std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(json.size()) + "\r\n\r\n" + json;
+                write(client_socket, response.c_str(), response.size());
                 close(client_socket);
                 continue;
             }
 
-            if (body_pos != std::string_view::npos) {
-                chunk.remove_prefix(body_pos + 4);
+            if (head.find("POST /api/resolve") != std::string_view::npos) {
+                parser.load_chunk(body);
+                ParsedPayload p = parser.parse_trade(); // Side/MarketID reused for resolve
+                engine.resolve_market(p.market_id, p.side == 0 ? Side::Yes : Side::No);
+                const char* res = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nRESOLVED OK";
+                write(client_socket, res, strlen(res));
+                close(client_socket);
+                continue;
             }
 
-            parser.load_chunk(chunk);
+            // Default: Process Trade
+            parser.load_chunk(body);
             ParsedPayload payload = parser.parse_trade();
 
             if (payload.market_id > 0 && payload.quantity > 0) {
-                engine.process_trade_execution(
+                FillReport report = engine.process_trade_execution(
                     payload.market_id,
                     payload.side == 0 ? Side::Yes : Side::No,
                     payload.price,
                     Order{global_order_id++, payload.persona_id, payload.quantity}
                 );
+                
+                std::string json = "{\"status\":\"OK\",\"filled\":" + std::to_string(report.filled) + 
+                                   ",\"total_cost\":" + std::to_string(report.total_cost) + "}";
+                std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + 
+                                       std::to_string(json.size()) + "\r\n\r\n" + json;
+                write(client_socket, response.c_str(), response.size());
+                close(client_socket);
+                continue;
             }
         }
         

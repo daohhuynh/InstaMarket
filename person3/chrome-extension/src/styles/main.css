@@ -2838,3 +2838,103 @@ html[data-im-site="wapo"] #im-sidebar .im2-bottom-btn:hover {
   font-size: 10px;
   font-weight: 700;
 }
+
+/* Gacha Animations for Resolution */
+@keyframes im-rise-fade {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+}
+
+@keyframes im-glow-pulse {
+  0% { box-shadow: 0 0 5px rgba(0, 186, 124, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(0, 186, 124, 0.6); }
+  100% { box-shadow: 0 0 5px rgba(0, 186, 124, 0.2); }
+}
+
+@keyframes im-glow-pulse-red {
+  0% { box-shadow: 0 0 5px rgba(249, 24, 128, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(249, 24, 128, 0.6); }
+  100% { box-shadow: 0 0 5px rgba(249, 24, 128, 0.2); }
+}
+
+.im2-rise-pnl {
+  position: fixed;
+  pointer-events: none;
+  font-weight: 900;
+  font-size: 20px;
+  z-index: 30000;
+  animation: im-rise-fade 1s ease-out forwards;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* Premium Top-Center Gacha Feedback - Resorted Perfection */
+.im2-rise-pnl-premium {
+  position: fixed !important;
+  top: 15% !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  font-weight: 900;
+  font-size: 22px;
+  z-index: 2147483647 !important;
+  animation: im-rise-fade-center 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  letter-spacing: -0.5px;
+}
+
+@keyframes im-rise-fade-center {
+  0% { transform: translate(-50%, 20px); opacity: 0; filter: blur(5px); }
+  20% { opacity: 1; filter: blur(0); }
+  80% { opacity: 1; }
+  100% { transform: translate(-50%, -60px); opacity: 0; }
+}
+
+.im2-rise-pnl-premium.win {
+  color: #00ba7c;
+  text-shadow: 0 0 20px rgba(0, 186, 124, 0.6), 0 0 40px rgba(0, 186, 124, 0.3);
+}
+
+.im2-rise-pnl-premium.lose {
+  color: #f91880;
+  text-shadow: 0 0 20px rgba(249, 24, 128, 0.6), 0 0 40px rgba(249, 24, 128, 0.3);
+}
+
+
+/* Isolated Feed Gacha Billboard (High Fidelity Mirror) */
+.im-gacha-billboard-feed {
+  position: fixed !important;
+  top: 25% !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  font-weight: 900;
+  font-size: 22px;
+  z-index: 2147483647 !important;
+  animation: im-rise-fade-center 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  letter-spacing: -0.5px;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.im-gacha-billboard-feed.win {
+  color: #00ba7c;
+  text-shadow: 0 0 20px rgba(0, 186, 124, 0.6), 0 0 40px rgba(0, 186, 124, 0.3);
+}
+
+.im-gacha-billboard-feed.lose {
+  color: #f91880;
+  text-shadow: 0 0 20px rgba(249, 24, 128, 0.6), 0 0 40px rgba(249, 24, 128, 0.3);
+}

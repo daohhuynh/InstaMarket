@@ -19,12 +19,16 @@ struct PriceLevel {
     size_t head = 0;
 };
 
+struct FillReport {
+    uint64_t filled;
+    uint64_t total_cost;
+};
+
 class PolymarketBook {
     std::array<PriceLevel, 100> yes_book;
     std::array<PriceLevel, 100> no_book;
     
 public:
-    // 2. ADDED: Keep track of this market's state
     MarketState state = MarketState::Open; 
 
     PolymarketBook() {
@@ -32,9 +36,8 @@ public:
         for (auto& level : no_book) level.orders.reserve(8192);
     }
 
-    // 3. ADDED: The resolution logic to freeze and clear the book
     inline void resolve_market(const Side winning_side) {
-        if (state != MarketState::Open) return; // Already resolved
+        if (state != MarketState::Open) return; 
 
         state = (winning_side == Side::Yes) ? MarketState::ResolvedYes : MarketState::ResolvedNo;
 
@@ -46,13 +49,15 @@ public:
         }
     }
 
-    inline void submit(const Side side, const uint64_t price, Order&& o) {
-        if (state != MarketState::Open) return; 
+    inline FillReport submit(const Side side, const uint64_t price, Order&& o) {
+        if (state != MarketState::Open) return {0, 0}; 
 
         std::array<PriceLevel, 100>& opp_book = (side == Side::Yes) ? no_book : yes_book;
         std::array<PriceLevel, 100>& own_book = (side == Side::Yes) ? yes_book : no_book;
         
         const uint64_t opp_price = 100 - price;
+        uint64_t total_filled = 0;
+        uint64_t total_cost = 0;
 
         for (uint64_t p = 1; p <= opp_price && o.quantity > 0; ++p) {
             PriceLevel& level = opp_book[p];
@@ -64,6 +69,8 @@ public:
                 
                 o.quantity -= fill;
                 top.quantity -= fill;
+                total_filled += fill;
+                total_cost += fill * p;
                 
                 level.head += (top.quantity == 0);
             }
@@ -72,6 +79,7 @@ public:
         if (o.quantity > 0) {
             own_book[price].orders.emplace_back(std::move(o));
         }
+        return {total_filled, total_cost};
     }
 
     inline std::string get_depth_json() const {
@@ -118,10 +126,11 @@ public:
         markets.resize(count);
     }
 
-    inline void process_trade_execution(const uint64_t market_id, const Side side, const uint64_t price, Order&& o) {
+    inline FillReport process_trade_execution(const uint64_t market_id, const Side side, const uint64_t price, Order&& o) {
         if (market_id < markets.size()) {
-            markets[market_id].submit(side, price, std::move(o));
+            return markets[market_id].submit(side, price, std::move(o));
         }
+        return {0, 0};
     }
 
     // 5. ADDED: Wrapper so your API endpoint can call engine.resolve_market(id, side)

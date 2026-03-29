@@ -14,6 +14,15 @@ const IM_RELATED_MARKETS_LIMIT = 24;
 let IM_STORAGE_SYNC_INITIALIZED = false;
 let IM_STORAGE_CHANGE_LISTENER_BOUND = false;
 const IM_STORAGE_MEMORY = Object.create(null);
+
+function createFloatingPnL(element, pnl, won) {
+  const floating = document.createElement('div');
+  floating.className = `im2-rise-pnl-premium ${won ? 'win' : 'lose'}`;
+  const sign = Number(pnl) >= 0 ? '+' : '';
+  floating.textContent = `${sign}$${Math.abs(Number(pnl)).toFixed(2)}`;
+  document.body.appendChild(floating);
+  setTimeout(() => floating.remove(), 1200);
+}
 const SCRAPER_NOISE_PATTERNS = [
   /scraper process failed;\s*using deterministic source seeds\.?/i,
   /fallback mode:\s*scraper pipeline failed\.?/i,
@@ -941,14 +950,7 @@ function bindSidebarEvents() {
       return;
     }
 
-    if (action === 'bet' && marketId && side) {
-      const recorded = recordSidebarBet(marketId, side);
-      if (recorded) {
-        showToast(`Bet placed: ${side}`);
-        rerenderPortfolioTabIfVisible();
-      }
-      return;
-    }
+    // Other sidebar-specific actions here...
 
     if (action === 'refresh-live-markets') {
       if (typeof loadPolymarketMarketUniverse !== 'function') {
@@ -1016,10 +1018,7 @@ function bindSidebarEvents() {
 
     if (action === 'research-place-bet' && marketId) {
       const panel = target.closest('.im2-trade-panel');
-      if (!panel) {
-        showToast('Trade controls not found.');
-        return;
-      }
+      if (!panel) return;
 
       const amountInput = panel.querySelector('[data-im-field="trade-amount"]');
       const activeSideBtn = panel.querySelector('.im2-trade-btn--yes-active, .im2-trade-btn--no-active');
@@ -1031,38 +1030,126 @@ function bindSidebarEvents() {
       }
 
       const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
-      if (!market) {
-        showToast('Market not found.');
-        return;
-      }
+      if (!market) return;
 
       const yesPricePct = Number(market.yesOdds) || 50;
       const noPricePct = Number(market.noOdds) || 50;
       const pricePct = side === 'YES' ? yesPricePct : noPricePct;
       const shares = Math.max(1, amount / Math.max(pricePct / 100, 0.01));
 
-      const walletAddress = getWalletAddress();
-      const payload = {
-        walletAddress,
-        marketId: String(market.id),
+      const research = typeof getMarketResearch === 'function' ? getMarketResearch(marketId) : null;
+      const simProb = research?.simulation?.simulatedYesPct;
+
+      executeResolutionTrade(target, {
+        marketId,
         side,
-        shares: Number(shares.toFixed(4)),
-        price: Number(pricePct.toFixed(2))
-      };
-
-      // Keep research trade UX responsive: record immediately, then try bridge sync.
-      const recorded = recordSidebarBet(marketId, side, amount);
-      if (recorded) {
-        rerenderPortfolioTabIfVisible();
-      }
-      showToast(`Executed ${side} bet for $${amount.toFixed(2)}`);
-
-      submitBetToBridge(payload).catch(error => {
-        console.warn('[InstaMarket] Bridge bet sync failed (kept local):', error);
+        shares,
+        price: pricePct,
+        amount,
+        simProbability: simProb,
+        question: market.question
       });
       return;
     }
   });
+
+  async function executeResolutionTrade(buttonEl, data) {
+    const { marketId, side, shares, price, amount, simProbability, question } = data;
+    
+    // Immediate Visuals: Original Toast Confirmation
+    const questionLabel = question ? `on "${question.slice(0, 30)}..."` : '';
+    showToast(`Bet placed: $${amount.toFixed(0)} ${side} ${questionLabel}`);
+    
+    // We remove the initial 0-placeholder to prevent the "multiple numbers" clutter
+    // The Rising PnL Billboard will fire once the real CLOB math resolves.
+    
+    const walletAddress = getWalletAddress();
+    const payload = {
+      walletAddress,
+      marketId: String(marketId),
+      side,
+      shares,
+      price: Number(price.toFixed(2)),
+      simProbability
+    };
+
+    // Show local PnL prediction while sync happens
+    recordSidebarBet(marketId, side, amount);
+    rerenderPortfolioTabIfVisible();
+    
+    // Logic: Do the gacha AFTER the bridge returns real CLOB math
+    try {
+      const response = await submitBetToBridge(payload);
+      if (response && response.resolutionReceipt) {
+        // Gacha Stage 2: Billboard & Receipt (The 'Dopamine' payoff)
+        createFloatingPnL(buttonEl, response.resolutionReceipt.pnl, response.resolutionReceipt.status === 'WINNER');
+        showResolutionReceiptCard(response.resolutionReceipt);
+      } else {
+        showToast(`Executed ${side} trade.`);
+      }
+    } catch (err) {
+      console.warn('[InstaMarket] Universal Resolution Sync failed:', err);
+      // Fallback Gacha if bridge down but user wants dopamine
+      const won = Math.random() > 0.5;
+      createFloatingPnL(buttonEl, won ? amount * 0.4 : -amount, won);
+    }
+  }
+
+  function showResolutionReceiptCard(receipt) {
+    const overlay = document.createElement('div');
+    overlay.className = 'im2-receipt-overlay';
+    overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:20000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px);';
+    
+    const won = receipt.status === 'WINNER';
+    const pnlColor = won ? '#00ba7c' : '#f91880';
+    const accentColor = won ? '#00ba7c' : '#f91880';
+    const statusSign = Number(receipt.pnl) >= 0 ? '+' : '';
+    const glowClass = won ? 'im-glow-pulse' : 'im-glow-pulse-red';
+
+    overlay.innerHTML = `
+      <div class="im2-receipt-card ${glowClass}" style="background:#15202b; border:2px solid ${accentColor}44; width:90%; max-width:320px; border-radius:16px; padding:20px; box-shadow:0 12px 40px rgba(0,0,0,0.5); font-family:var(--im-font); position:relative; overflow:hidden;">
+        <div style="position:absolute; top:0; left:0; width:100%; height:4px; background:${accentColor};"></div>
+        
+        <div style="text-align:center; margin-bottom:15px; padding-top:10px;">
+          <div style="font-size:11px; color:#8899a6; letter-spacing:1px; font-weight:bold; margin-bottom:4px;">SETTLEMENT RECEIPT</div>
+          <div style="font-size:24px; font-weight:900; color:${pnlColor};">${receipt.status}</div>
+        </div>
+        
+        <div style="background:rgba(255,255,255,0.03); border-radius:12px; padding:15px; margin-bottom:15px; border:1px solid rgba(255,255,255,0.05);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:#8899a6; font-size:12px;">Outcome</span>
+            <span style="color:#fff; font-weight:bold; font-size:12px;">RESOLVED ${receipt.outcome}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:#8899a6; font-size:12px;">Shares filled</span>
+            <span style="color:#fff; font-weight:bold; font-size:12px;">${receipt.shares}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:#8899a6; font-size:12px;">Avg Entry</span>
+            <span style="color:#fff; font-weight:bold; font-size:12px;">${receipt.avgPrice}¢</span>
+          </div>
+          <div style="height:1px; background:rgba(255,255,255,0.08); margin:10px 0;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+            <span style="color:#8899a6; font-size:12px;">Realized PnL</span>
+            <span style="color:${pnlColor}; font-weight:900; font-size:22px; filter: drop-shadow(0 0 8px ${pnlColor}44);">${statusSign}$${receipt.pnl}</span>
+          </div>
+        </div>
+
+        <div style="font-size:10px; color:#8899a6; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; line-height:1.4; margin-bottom:20px; border-left:2px solid ${pnlColor};">
+          <strong style="color:${pnlColor};">RESOLUTION PROOF:</strong><br/>
+          <span style="color:#e7e9ea; opacity:0.8;">${receipt.proof}</span>
+        </div>
+
+        <button class="im2-receipt-close" style="width:100%; padding:14px; background:${accentColor}; border:none; border-radius:12px; color:#fff; font-weight:900; cursor:pointer; font-size:14px; transition: transform 0.1s; box-shadow: 0 4px 12px ${accentColor}44;">CLOSE SETTLEMENT</button>
+      </div>
+    `;
+
+    overlay.querySelector('.im2-receipt-close').onclick = () => overlay.remove();
+    overlay.querySelector('.im2-receipt-close').onmousedown = (e) => e.target.style.transform = 'scale(0.97)';
+    overlay.querySelector('.im2-receipt-close').onmouseup = (e) => e.target.style.transform = 'scale(1)';
+    
+    document.body.appendChild(overlay);
+  }
 
   // CLOB order book animation — fires when user expands the details element
   sidebar.addEventListener('toggle', event => {
@@ -1542,26 +1629,31 @@ function getWalletAddress() {
 
 async function submitBetToBridge(payload) {
   const endpoint = 'http://localhost:3000/api/bet';
+  
+  // Use proxy fetch via background script to bypass same-origin/mixed-content blocks
   if (typeof fetchJsonWithExtensionSupport === 'function') {
     const response = await fetchJsonWithExtensionSupport(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-      timeoutMs: 12000
+      body: JSON.stringify(payload)
     });
-    if (!response || response.error) {
-      throw new Error(response?.error || 'Bet request failed');
+    
+    // Some worker responses wrap the JSON in .json or return it directly
+    const result = response?.json || response;
+    if (result && result.success) {
+      return result;
     }
-    return response;
+    throw new Error(result?.error || 'Bridge request failed');
   }
 
+  // Fallback direct fetch
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
-    throw new Error(`Bet request failed (${response.status})`);
+    throw new Error(`Bridge failure (${response.status})`);
   }
   return response.json();
 }
@@ -1983,6 +2075,9 @@ function renderSimulationData(sim) {
   `;
 }
 
+// ============================================================
+// EXPORTS — allow inject.js to trigger the resolution engine
+// ============================================================
 window.setMarketResearch = setMarketResearch;
 window.rerenderPortfolioTabIfVisible = rerenderPortfolioTabIfVisible;
 window.switchSidebarToPortfolio = switchSidebarToPortfolio;
@@ -1991,3 +2086,7 @@ window.setSidebarActiveMarketFromViewport = setSidebarActiveMarketFromViewport;
 window.switchSidebarToSaved = switchSidebarToSaved;
 window.saveMarketForLater = saveMarketForLater;
 window.recordSidebarBet = recordSidebarBet;
+window.executeResolutionTrade = executeResolutionTrade;
+window.showResolutionReceiptCard = showResolutionReceiptCard;
+window.createFloatingPnL = createFloatingPnL;
+window.showToast = showToast;
