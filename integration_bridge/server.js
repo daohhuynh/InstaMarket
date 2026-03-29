@@ -351,8 +351,51 @@ app.post("/api/persona-sim", async (req, res) => {
     console.error("[persona-sim] failed:", err);
     res.status(500).json({ error: "Simulation failed", detail: err.message });
   } finally {
-    // FIX 1: Release the lock for this specific market!
     activeSims.delete(market.id);
+  }
+});
+
+app.post("/api/resolve-market", async (req, res) => {
+  const { marketId, winningSide } = req.body; // winningSide is "YES" or "NO"
+
+  try {
+    // 1. Tell the C++ Engine to freeze the book and resolve
+    await fetch("http://localhost:8080/api/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        market_id: parseMarketId(marketId), 
+        winning_side: winningSide === "YES" ? 0 : 1 
+      })
+    });
+
+    // 2. Update the Human's Portfolio in Supabase
+    const { data: positions } = await supabase
+      .from("positions")
+      .select("*")
+      .eq("market_id", parseMarketId(marketId));
+
+    let totalPayout = 0;
+    
+    if (positions) {
+      for (const pos of positions) {
+        // If they bet on the winning side, they get $1 per share.
+        if (pos.side === winningSide) {
+           totalPayout += (pos.shares * 1.00); 
+        }
+      }
+    }
+
+    // (Optional) Update human's USDC balance in DB or via Solana here
+
+    res.json({ 
+      success: true, 
+      message: `Market ${marketId} resolved to ${winningSide}.`,
+      human_payout: totalPayout
+    });
+  } catch (err) {
+    console.error("Failed to resolve market:", err);
+    res.status(500).json({ error: "Resolution failed" });
   }
 });
 
