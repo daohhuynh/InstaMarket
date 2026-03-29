@@ -68,34 +68,58 @@
 
     const modal = document.createElement('div');
     modal.id = 'im-ditto-modal';
-    modal.innerHTML = `
-      <div class="im-ditto-header">
-        <div>
-          <div class="im-ditto-title"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" style="width:20px;height:20px;vertical-align:middle;image-rendering:pixelated;margin-right:6px;">Ditto Matchmaking</div>
-          <div class="im-ditto-sub">Your trading tribe</div>
-        </div>
-        <button class="im-ditto-close" onclick="document.getElementById('im-ditto-modal').classList.remove('open')">✕</button>
-      </div>
-      <div class="im-ditto-list">
-        ${DITTO_PROFILES.map(p => `
-          <div class="im-ditto-profile">
-            <div class="im-ditto-match-row">
-              <div class="im-ditto-avatar" style="background:${p.color};">${p.emoji}</div>
-              <div class="im-ditto-name">${p.name}</div>
-              <div class="im-ditto-pct">${p.matchPct}% match</div>
-            </div>
-            <div class="im-ditto-reason">${p.reason}</div>
-            <button class="im-ditto-connect">Connect → Trade Together</button>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    modal.innerHTML = renderDittoModal();
     document.body.appendChild(modal);
+
+    const closeBtn = modal.querySelector('.im-ditto-close');
+    closeBtn?.addEventListener('click', () => {
+      modal.classList.remove('open');
+    });
   }
 
   function toggleDittoModal() {
     const modal = document.getElementById('im-ditto-modal');
-    if (modal) modal.classList.toggle('open');
+    if (!modal) return;
+    modal.innerHTML = renderDittoModal();
+    const closeBtn = modal.querySelector('.im-ditto-close');
+    closeBtn?.addEventListener('click', () => modal.classList.remove('open'));
+    modal.classList.toggle('open');
+  }
+
+  function renderDittoModal() {
+    const betLog = readJsonLocalStorage('instamarket_bet_log_v1');
+    const uniqueMarkets = new Set(Array.isArray(betLog) ? betLog.map(entry => entry?.marketId).filter(Boolean) : []);
+    const betCount = Array.isArray(betLog) ? betLog.length : 0;
+
+    return `
+      <div class="im-ditto-header">
+        <div>
+          <div class="im-ditto-title"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" style="width:20px;height:20px;vertical-align:middle;image-rendering:pixelated;margin-right:6px;">Ditto Matchmaking</div>
+          <div class="im-ditto-sub">Live-only mode</div>
+        </div>
+        <button class="im-ditto-close">✕</button>
+      </div>
+      <div class="im-ditto-list">
+        <div class="im-ditto-profile">
+          <div class="im-market-title">No mock profiles</div>
+          <div class="im-ditto-reason">This panel is now live-only. Matchmaker profiles will appear when Person 4's compatibility service is connected.</div>
+        </div>
+        <div class="im-ditto-profile">
+          <div class="im-market-title">Your activity snapshot</div>
+          <div class="im-ditto-reason">Bets placed: ${betCount}</div>
+          <div class="im-ditto-reason">Markets traded: ${uniqueMarkets.size}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function readJsonLocalStorage(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
   }
 
   // ── Tweet observation ────────────────────────────────────
@@ -121,12 +145,16 @@
     const market = match.market;
     const researchSummary = buildResearchSummary(tweetText, match);
     persistResearch(market.id, researchSummary);
+    const safeQuestion = escapeHtml(market.question);
+    const safeVolume = escapeHtml(market.volume || '$0 Vol');
+    const safeMarketId = escapeHtml(String(market.id));
+    const safeMarketUrl = escapeHtml(market.polymarketUrl || '');
 
     const layer = document.createElement('div');
     layer.className = 'im-tweet-layer';
     layer.innerHTML = `
       <div class="im-market-question">
-        Market: <span>${market.question}</span>
+        Market: <span>${safeQuestion}</span>
         <span class="im-match-confidence">· ${match.confidence}% ${match.source === 'aws-bedrock' ? 'AI' : 'parser'} match</span>
       </div>
       <div class="im-tweet-actions">
@@ -135,24 +163,24 @@
           <span class="im-sep">|</span>
           <span class="im-no-pct">NO ${market.noOdds}%</span>
           <span class="im-sep">·</span>
-          <span class="im-vol">${market.volume}</span>
+          <span class="im-vol">${safeVolume}</span>
         </div>
-        <button class="im-bet-yes" data-market="${market.id}" data-side="YES">
+        <button class="im-bet-yes" data-market="${safeMarketId}" data-side="YES">
           <span class="im-arrow-up"></span> YES
         </button>
-        <button class="im-bet-no" data-market="${market.id}" data-side="NO">
+        <button class="im-bet-no" data-market="${safeMarketId}" data-side="NO">
           <span class="im-arrow-down"></span> NO
         </button>
-        <button class="im-save-btn" data-market="${market.id}">
+        <button class="im-save-btn" data-market="${safeMarketId}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
           </svg>
           Save
         </button>
-        <button class="im-research-btn" data-market="${market.id}">
+        <button class="im-research-btn" data-market="${safeMarketId}">
           Research
         </button>
-        <div class="im-pm-link" title="View on Polymarket" data-market-url="${market.polymarketUrl || ''}">
+        <div class="im-pm-link" title="View on Polymarket" data-market-url="${safeMarketUrl}">
           <svg class="im-pm-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="2" fill="none"/>
           </svg>
@@ -167,6 +195,9 @@
         const side = btn.dataset.side;
         const mId = btn.dataset.market;
         showToast(`Bet placed: ${side} on "${market.question.slice(0, 40)}…" ✓`);
+        if (typeof window.recordSidebarBet === 'function') {
+          window.recordSidebarBet(mId, side);
+        }
         persistResearch(mId, researchSummary);
         switchSidebarToMarkets(mId);
       });
@@ -174,6 +205,11 @@
 
     layer.querySelector('.im-save-btn').addEventListener('click', e => {
       e.stopPropagation();
+      if (typeof window.saveMarketForLater === 'function') {
+        const saved = window.saveMarketForLater(market.id);
+        showToast(saved ? `Saved: "${market.question.slice(0, 40)}…" ✓` : 'Already saved.');
+        return;
+      }
       showToast(`Saved: "${market.question.slice(0, 40)}…" ✓`);
     });
 
@@ -202,6 +238,15 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
   function persistResearch(marketId, payload) {
     if (typeof setMarketResearch === 'function') {
       setMarketResearch(marketId, payload);
@@ -218,7 +263,7 @@
         console.info(`[InstaMarket] Loaded ${result.count} live Polymarket markets.`);
       }
     } catch (error) {
-      console.warn('[InstaMarket] Falling back to local markets:', error);
+      console.warn('[InstaMarket] Unable to load live Polymarket markets:', error);
     }
   }
 

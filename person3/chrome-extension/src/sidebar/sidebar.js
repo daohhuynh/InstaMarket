@@ -1,16 +1,22 @@
 // ============================================================
-// SIDEBAR — renders the full InstaMarket right sidebar
+// SIDEBAR — renders the InstaMarket right sidebar (live-data only)
 // ============================================================
 
 const IM_MARKET_RESEARCH = {};
+const IM_SAVED_MARKETS_KEY = 'instamarket_saved_markets_v1';
+const IM_BET_LOG_KEY = 'instamarket_bet_log_v1';
+const IM_MAX_SAVED_MARKETS = 200;
+const IM_MAX_BET_LOG = 250;
+
+let IM_ACTIVE_MARKET_ID = null;
 
 function setMarketResearch(marketId, research) {
   if (!marketId || !research) return;
-  IM_MARKET_RESEARCH[marketId] = research;
+  IM_MARKET_RESEARCH[String(marketId)] = research;
 }
 
 function getMarketResearch(marketId) {
-  return IM_MARKET_RESEARCH[marketId];
+  return IM_MARKET_RESEARCH[String(marketId)] || null;
 }
 
 function createSidebar() {
@@ -26,17 +32,14 @@ function createSidebar() {
       <button class="im-tab" data-tab="saved">Saved</button>
     </div>
 
-    <!-- PORTFOLIO TAB -->
     <div class="im-tab-content active" id="im-tab-portfolio">
       ${renderPortfolioTab()}
     </div>
 
-    <!-- MARKETS TAB -->
     <div class="im-tab-content" id="im-tab-markets">
-      ${renderMarketsTab()}
+      ${renderMarketsTab(IM_ACTIVE_MARKET_ID)}
     </div>
 
-    <!-- SAVED TAB -->
     <div class="im-tab-content" id="im-tab-saved">
       ${renderSavedTab()}
     </div>
@@ -44,78 +47,80 @@ function createSidebar() {
 
   document.body.appendChild(sidebar);
   bindSidebarEvents();
-  drawPayoffCurve();
 }
 
 function renderPortfolioTab() {
-  const p = MOCK_PORTFOLIO;
-  const pnlPos = p.dailyPnl.startsWith('+');
+  const betLog = getBetLog();
+  if (!betLog.length) {
+    return renderEmptyPanel(
+      'No portfolio data yet',
+      'Place your first YES/NO bet from a tweet card and your activity will appear here.'
+    );
+  }
+
+  const yesCount = betLog.filter(entry => entry.side === 'YES').length;
+  const noCount = betLog.filter(entry => entry.side === 'NO').length;
+  const uniqueMarkets = new Set(betLog.map(entry => entry.marketId)).size;
+  const recent = [...betLog].slice(-12).reverse();
 
   return `
     <div class="im-portfolio-header">
-      <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Value</div>
-      <div class="im-portfolio-value">${p.totalValue}</div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span class="${pnlPos ? 'im-arrow-up' : 'im-arrow-down'}"></span>
-        <span style="font-size:14px;font-weight:700;color:${pnlPos ? 'var(--pm-green)' : 'var(--pm-red)'};">${p.dailyPnl} today</span>
-      </div>
+      <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Live Portfolio Activity</div>
+      <div class="im-portfolio-value">${betLog.length} Bets</div>
       <div class="im-portfolio-stats">
         <div class="im-stat-box">
-          <div class="im-stat-label">Daily P&L</div>
-          <div class="im-stat-val ${pnlPos ? 'green' : 'red'}">${p.dailyPnlPct}</div>
+          <div class="im-stat-label">YES Bets</div>
+          <div class="im-stat-val green">${yesCount}</div>
         </div>
         <div class="im-stat-box">
-          <div class="im-stat-label">Win Rate</div>
-          <div class="im-stat-val green">${p.winRate}</div>
+          <div class="im-stat-label">NO Bets</div>
+          <div class="im-stat-val red">${noCount}</div>
         </div>
         <div class="im-stat-box">
-          <div class="im-stat-label">Avg Return</div>
-          <div class="im-stat-val green">${p.avgReturn}</div>
+          <div class="im-stat-label">Markets</div>
+          <div class="im-stat-val">${uniqueMarkets}</div>
         </div>
       </div>
     </div>
 
-    <div class="im-chart-wrap">
-      <div class="im-chart-title">Payoff Curve</div>
-      <canvas class="im-chart-canvas" id="im-payoff-canvas"></canvas>
+    <div class="im-section-header">Recent Bets</div>
+    ${recent.map(renderBetRow).join('')}
+  `;
+}
+
+function renderBetRow(entry) {
+  const positiveSide = entry.side === 'YES';
+  return `
+    <div class="im-position-row">
+      <div class="im-position-info">
+        <div class="im-position-title">${escapeHtml(entry.question || 'Unknown market')}</div>
+        <div class="im-position-meta">
+          <span style="color:${positiveSide ? 'var(--pm-green)' : 'var(--pm-red)'};">${escapeHtml(entry.side)}</span>
+          &nbsp;·&nbsp;${formatTimestamp(entry.placedAt)}
+        </div>
+      </div>
+      <div class="im-position-pnl ${positiveSide ? 'pos' : 'neg'}">${positiveSide ? 'YES' : 'NO'}</div>
     </div>
-
-    <div class="im-section-header">Open Positions</div>
-    ${p.positions.map(pos => `
-      <div class="im-position-row">
-        <div class="im-position-info">
-          <div class="im-position-title">${pos.title}</div>
-          <div class="im-position-meta">
-            <span style="color:${pos.side === 'YES' ? 'var(--pm-green)' : 'var(--pm-red)'};">${pos.side}</span>
-            &nbsp;·&nbsp;Stake ${pos.stake}
-          </div>
-        </div>
-        <div>
-          <div class="im-position-pnl ${pos.positive ? 'pos' : 'neg'}">${pos.pnl}</div>
-          <div style="font-size:10px;color:var(--pm-text-secondary);text-align:right;">${pos.pnlPct}</div>
-        </div>
-      </div>
-    `).join('')}
-
-    <div class="im-section-header" style="margin-top:4px;">Bet History</div>
-    ${p.history.map(h => `
-      <div class="im-position-row">
-        <div class="im-position-info">
-          <div class="im-position-title">${h.title}</div>
-          <div class="im-position-meta">
-            <span style="color:${h.side === 'YES' ? 'var(--pm-green)' : 'var(--pm-red)'};">${h.side}</span>
-            &nbsp;·&nbsp;${h.stake}&nbsp;·&nbsp;${h.date}
-          </div>
-        </div>
-        <div class="im-position-pnl ${h.positive ? 'pos' : 'neg'}">${h.pnl}</div>
-      </div>
-    `).join('')}
   `;
 }
 
 function renderMarketsTab(activeMarketId) {
   const markets = getRenderableMarkets();
+  if (!markets.length) {
+    return `
+      ${renderEmptyPanel(
+        'No live markets loaded',
+        'Could not load active Polymarket markets yet. Click refresh to retry.'
+      )}
+      <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
+    `;
+  }
+
   const primary = resolvePrimaryMarket(markets, activeMarketId);
+  if (!primary) {
+    return renderEmptyPanel('No matchable markets', 'Live data loaded but no valid market entries were found.');
+  }
+
   const related = buildRelatedMarkets(primary, markets);
   const research = getMarketResearch(primary.id);
 
@@ -123,53 +128,44 @@ function renderMarketsTab(activeMarketId) {
     ${renderMarketCard(primary, true)}
 
     <div class="im-section-header">Related Markets</div>
-    ${related.map(m => renderMarketCard(m, false)).join('')}
+    ${related.length ? related.map(market => renderMarketCard(market, false)).join('') : renderEmptyPanel('No related markets', 'No nearby related market found for this topic.')}
 
     <div class="im-section-header">Research</div>
     ${research ? renderResearchCard(research) : renderResearchPlaceholder(primary)}
 
-    <div class="im-section-header">AI Agent Analysis</div>
-    ${MOCK_AGENTS.map(a => renderAgentCard(a)).join('')}
-
-    <div class="im-section-header">Risk Analysis</div>
-    ${renderRiskPanel()}
-
-    <div class="im-section-header">Recommendation</div>
-    ${renderRecCard()}
-
-    <div class="im-section-header">Persona Simulation</div>
-    ${renderPersonaCards()}
-
-    <button class="im-export-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-      </svg>
-      Export as PDF Report
-    </button>
+    <button class="im-export-btn" data-im-action="refresh-live-markets">Refresh Live Markets</button>
   `;
 }
 
 function getRenderableMarkets() {
-  if (typeof getMarketUniverse === "function") {
-    const liveMarkets = getMarketUniverse();
-    if (Array.isArray(liveMarkets) && liveMarkets.length > 0) {
-      return liveMarkets;
-    }
+  if (typeof getMarketUniverse !== 'function') {
+    return [];
   }
-  return MOCK_MARKETS;
+
+  const liveMarkets = getMarketUniverse();
+  if (!Array.isArray(liveMarkets)) {
+    return [];
+  }
+
+  return liveMarkets;
 }
 
 function resolvePrimaryMarket(markets, activeMarketId) {
-  if (activeMarketId && typeof getMarketById === "function") {
+  if (!Array.isArray(markets) || !markets.length) {
+    return null;
+  }
+
+  if (activeMarketId && typeof getMarketById === 'function') {
     const direct = getMarketById(activeMarketId);
     if (direct) return direct;
   }
 
-  return markets.find(m => m.id === (activeMarketId || 'm1')) || markets[0];
+  return markets[0] || null;
 }
 
 function buildRelatedMarkets(primary, markets) {
-  if (!primary) return [];
+  if (!primary || !Array.isArray(markets)) return [];
+
   if (Array.isArray(primary.relatedMarkets) && primary.relatedMarkets.length > 0) {
     const byId = new Map(markets.map(market => [String(market.id), market]));
     return primary.relatedMarkets
@@ -178,26 +174,29 @@ function buildRelatedMarkets(primary, markets) {
       .slice(0, 4);
   }
 
-  const sameCategory = markets.filter(m => m.id !== primary.id && m.category && primary.category && m.category === primary.category);
+  const sameCategory = markets.filter(market =>
+    market.id !== primary.id && market.category && primary.category && market.category === primary.category
+  );
   if (sameCategory.length > 0) {
     return sameCategory.slice(0, 4);
   }
 
-  const lexicallyRelated = markets
-    .filter(m => m.id !== primary.id)
+  const lexical = markets
+    .filter(market => market.id !== primary.id)
     .map(market => ({ market, score: lexicalOverlap(primary.question, market.question) }))
     .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((left, right) => right.score - left.score)
     .slice(0, 4)
     .map(item => item.market);
 
-  return lexicallyRelated;
+  return lexical;
 }
 
-function lexicalOverlap(a, b) {
-  if (typeof tokenizeForMatch !== "function") return 0;
-  const left = new Set(tokenizeForMatch(a));
-  const right = new Set(tokenizeForMatch(b));
+function lexicalOverlap(leftText, rightText) {
+  if (typeof tokenizeForMatch !== 'function') return 0;
+  const left = new Set(tokenizeForMatch(leftText));
+  const right = new Set(tokenizeForMatch(rightText));
+
   let overlap = 0;
   for (const token of left) {
     if (right.has(token)) overlap += 1;
@@ -209,32 +208,32 @@ function renderResearchCard(research) {
   const terms = Array.isArray(research.matchedTerms) ? research.matchedTerms : [];
   const steps = Array.isArray(research.steps) ? research.steps : [];
   const confidence = Number.isFinite(research.confidence) ? research.confidence : 0;
-  const method = typeof research.method === "string" ? research.method : "Parser";
+  const method = typeof research.method === 'string' ? research.method : 'Parser';
 
   return `
     <div class="im-risk-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <div class="im-market-title">${research.title || "Parser research"}</div>
+        <div class="im-market-title">${escapeHtml(research.title || 'Market research')}</div>
         <div style="font-size:11px;color:var(--pm-blue);font-weight:700;">${confidence}% confidence</div>
       </div>
       <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        ${research.summary || "No summary available."}
+        ${escapeHtml(research.summary || 'No summary available.')}
       </div>
       <div style="font-size:11px;color:var(--pm-blue);font-weight:600;">
-        Method: ${method}
+        Method: ${escapeHtml(method)}
       </div>
       ${terms.length ? `
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${terms.map(term => `<span class="im-best-match-badge" style="border-color:var(--pm-blue);color:var(--pm-blue);background:rgba(59,130,246,0.12);">${term}</span>`).join("")}
+          ${terms.map(term => `<span class="im-best-match-badge" style="border-color:var(--pm-blue);color:var(--pm-blue);background:rgba(59,130,246,0.12);">${escapeHtml(term)}</span>`).join('')}
         </div>
-      ` : ""}
+      ` : ''}
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${steps.map((step, index) => `
           <div class="im-reasoning-step" style="border-bottom:none;padding:0;">
             <span class="step-num">${index + 1}.</span>
-            <span>${step}</span>
+            <span>${escapeHtml(step)}</span>
           </div>
-        `).join("")}
+        `).join('')}
       </div>
     </div>
   `;
@@ -245,7 +244,7 @@ function renderResearchPlaceholder(primaryMarket) {
     <div class="im-risk-panel">
       <div class="im-market-title">No research yet</div>
       <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">
-        Click <strong>Research</strong> on a tweet that matches "${primaryMarket.question}" to generate parser-based reasoning.
+        Click <strong>Research</strong> on a tweet that matches "${escapeHtml(primaryMarket.question)}" to store live parser evidence.
       </div>
     </div>
   `;
@@ -253,252 +252,308 @@ function renderResearchPlaceholder(primaryMarket) {
 
 function renderMarketCard(market, isBest) {
   const marketLink = market.polymarketUrl
-    ? `<a href="${market.polymarketUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
-    : "";
+    ? `<a href="${escapeHtml(market.polymarketUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--pm-blue);text-decoration:none;">Open ↗</a>`
+    : '';
 
   return `
     <div class="im-market-card ${isBest ? 'best-match' : ''}">
-      ${isBest ? '<div class="im-best-match-badge">⭐ Best Match</div>' : ''}
-      <div class="im-market-title">${market.question}</div>
+      ${isBest ? '<div class="im-best-match-badge">Best Match</div>' : ''}
+      <div class="im-market-title">${escapeHtml(market.question)}</div>
       <div class="im-market-meta">
-        <span>${market.volume}</span>
-        ${market.category ? `<span>· ${market.category}</span>` : ""}
+        <span>${escapeHtml(market.volume || '$0 Vol')}</span>
+        ${market.category ? `<span>· ${escapeHtml(market.category)}</span>` : ''}
         ${marketLink}
       </div>
       <div class="im-market-odds-row">
-        <div class="im-yes-bar-wrap" data-market="${market.id}" data-side="YES">
-          <div class="im-bar-fill im-yes-fill" style="width:${market.yesOdds}%"></div>
+        <div class="im-yes-bar-wrap" data-im-action="bet" data-market-id="${escapeHtml(String(market.id))}" data-side="YES">
+          <div class="im-bar-fill im-yes-fill" style="width:${Number(market.yesOdds) || 0}%"></div>
           <div class="im-bar-label">
             <span class="im-arrow-up"></span>
-            YES ${market.yesOdds}%
+            YES ${Number(market.yesOdds) || 0}%
           </div>
         </div>
-        <div class="im-no-bar-wrap" data-market="${market.id}" data-side="NO">
-          <div class="im-bar-fill im-no-fill" style="width:${market.noOdds}%"></div>
+        <div class="im-no-bar-wrap" data-im-action="bet" data-market-id="${escapeHtml(String(market.id))}" data-side="NO">
+          <div class="im-bar-fill im-no-fill" style="width:${Number(market.noOdds) || 0}%"></div>
           <div class="im-bar-label">
             <span class="im-arrow-down"></span>
-            NO ${market.noOdds}%
+            NO ${Number(market.noOdds) || 0}%
           </div>
         </div>
-        <button class="im-card-save-btn" data-market="${market.id}">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-          </svg>
+        <button class="im-card-save-btn" data-im-action="save-market" data-market-id="${escapeHtml(String(market.id))}">
+          Save
         </button>
       </div>
     </div>
-  `;
-}
-
-function renderAgentCard(agent) {
-  return `
-    <div class="im-agent-card" id="agent-${agent.id}">
-      <div class="im-agent-header" onclick="toggleAgent('${agent.id}')">
-        <div class="im-agent-icon ${agent.iconClass}">${agent.iconLabel}</div>
-        <div class="im-agent-source">${agent.source}</div>
-        <div class="im-agent-insight">${agent.insight}</div>
-        <div class="im-agent-expand" id="agent-expand-${agent.id}">▼</div>
-      </div>
-      <div class="im-agent-reasoning" id="agent-reasoning-${agent.id}">
-        ${agent.reasoning.map(r => `
-          <div class="im-reasoning-step">
-            <span class="step-num">${r.step}.</span>
-            <span>${r.text}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderRiskPanel() {
-  const risks = Object.values(MOCK_RISK);
-  return `
-    <div class="im-risk-panel">
-      ${risks.map(r => `
-        <div class="im-risk-row">
-          <div class="im-risk-label-row">
-            <span class="im-risk-label">${r.label}</span>
-            <span class="im-risk-val">${r.value}%</span>
-          </div>
-          <div class="im-risk-bar-bg">
-            <div class="im-risk-bar-fill im-risk-${r.level}" style="width:${r.value}%"></div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function renderRecCard() {
-  const rec = MOCK_RECOMMENDATION;
-  return `
-    <div class="im-rec-card">
-      <div class="im-rec-title">Portfolio Agent Recommendation</div>
-      <div class="im-rec-main">Bet YES — ${rec.size}</div>
-      <div class="im-rec-sub">${rec.reasoning}</div>
-      <div class="im-rec-sub" style="color:var(--pm-yellow);">Hedge: ${rec.hedge}</div>
-      <div class="im-rec-actions">
-        <button class="im-btn-primary" onclick="showToast('Bet placed: YES $150 ✓')">Confirm Bet</button>
-        <button class="im-btn-secondary" onclick="showToast('Saved for later ✓')">Save for Later</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderPersonaCards() {
-  return `
-    ${MOCK_PERSONAS.map(p => `
-      <div class="im-persona-card">
-        <div class="im-persona-header">
-          <div class="im-persona-avatar">${p.emoji}</div>
-          <div class="im-persona-name">${p.handle}</div>
-          <div class="im-persona-portfolio">${p.portfolioSize}</div>
-        </div>
-        <div class="im-persona-bet-row">
-          <span style="font-size:12px;color:var(--pm-text-secondary);">Simulated bet: <strong style="color:var(--pm-text);">${p.bet}</strong></span>
-          <div class="im-persona-outcome ${p.won ? 'won' : 'lost'}">
-            <span>${p.won ? '▲' : '▼'}</span>
-            ${p.outcome}
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--pm-text-secondary);">${p.reasoning}</div>
-      </div>
-    `).join('')}
-    <div class="im-agent-disclosure">⚠ Missing context filled arbitrarily by simulation agent. Not financial advice.</div>
   `;
 }
 
 function renderSavedTab() {
-  return MOCK_SAVED.map(s => `
-    <div class="im-saved-row">
-      <div class="im-market-title">${s.question}</div>
-      <div class="im-market-meta">
-        <span>${s.savedAt}</span>
-        <span style="margin-left:4px;">· Saved at ${s.savedOdds}% · Now ${s.currentOdds}%</span>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="im-saved-delta ${s.favorable ? 'up' : 'down'}">
-          <span class="${s.favorable ? 'im-arrow-up' : 'im-arrow-down'}"></span>
-          ${s.favorable ? '+' : ''}${s.delta}% since saved ${s.favorable ? '(in your favor)' : '(against you)'}
+  const saved = getSavedMarketsDetailed();
+  if (!saved.length) {
+    return renderEmptyPanel(
+      'No saved markets yet',
+      'Use the Save button on tweet cards or market cards to track markets over time.'
+    );
+  }
+
+  return saved.map(item => {
+    const currentYes = Number.isFinite(item.currentYesOdds) ? item.currentYesOdds : item.savedYesOdds;
+    const currentNo = Number.isFinite(item.currentNoOdds) ? item.currentNoOdds : item.savedNoOdds;
+
+    let deltaHtml = '<span style="font-size:12px;color:var(--pm-text-secondary);">Current odds unavailable.</span>';
+    if (Number.isFinite(item.currentYesOdds)) {
+      const delta = item.currentYesOdds - item.savedYesOdds;
+      const favorable = delta >= 0;
+      deltaHtml = `
+        <div class="im-saved-delta ${favorable ? 'up' : 'down'}">
+          <span class="${favorable ? 'im-arrow-up' : 'im-arrow-down'}"></span>
+          ${favorable ? '+' : ''}${delta}% since saved
         </div>
-        <span style="font-size:11px;color:var(--pm-text-secondary);">${s.volume}</span>
+      `;
+    }
+
+    return `
+      <div class="im-saved-row">
+        <div class="im-market-title">${escapeHtml(item.question)}</div>
+        <div class="im-market-meta">
+          <span>Saved ${formatTimestamp(item.savedAt)}</span>
+          <span style="margin-left:4px;">· Saved at ${item.savedYesOdds}% YES</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          ${deltaHtml}
+          <span style="font-size:11px;color:var(--pm-text-secondary);">${escapeHtml(item.currentVolume || item.savedVolume || '$0 Vol')}</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:2px;">
+          <button class="im-bet-yes" style="flex:1;justify-content:center;" data-im-action="bet" data-market-id="${escapeHtml(String(item.marketId))}" data-side="YES">
+            <span class="im-arrow-up"></span> YES ${currentYes}%
+          </button>
+          <button class="im-bet-no" style="flex:1;justify-content:center;" data-im-action="bet" data-market-id="${escapeHtml(String(item.marketId))}" data-side="NO">
+            <span class="im-arrow-down"></span> NO ${currentNo}%
+          </button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:2px;">
-        <button class="im-bet-yes" style="flex:1;justify-content:center;" onclick="showToast('Bet placed: YES ✓')">
-          <span class="im-arrow-up"></span> YES ${s.currentOdds}%
-        </button>
-        <button class="im-bet-no" style="flex:1;justify-content:center;" onclick="showToast('Bet placed: NO ✓')">
-          <span class="im-arrow-down"></span> NO ${100 - s.currentOdds}%
-        </button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function bindSidebarEvents() {
-  // Tab switching
+  const sidebar = document.getElementById('im-sidebar');
+  if (!sidebar || sidebar.dataset.imBound === '1') {
+    return;
+  }
+  sidebar.dataset.imBound = '1';
+
+  sidebar.addEventListener('click', async event => {
+    const target = event.target.closest('[data-im-action]');
+    if (!target) return;
+
+    const action = target.getAttribute('data-im-action');
+    const marketId = target.getAttribute('data-market-id');
+    const side = target.getAttribute('data-side');
+
+    if (action === 'save-market' && marketId) {
+      const saved = saveMarketForLater(marketId);
+      showToast(saved ? 'Market saved.' : 'Market already saved.');
+      rerenderSavedTabIfVisible();
+      return;
+    }
+
+    if (action === 'bet' && marketId && side) {
+      const recorded = recordSidebarBet(marketId, side);
+      if (recorded) {
+        showToast(`Bet placed: ${side}`);
+        rerenderPortfolioTabIfVisible();
+      }
+      return;
+    }
+
+    if (action === 'refresh-live-markets') {
+      if (typeof loadPolymarketMarketUniverse !== 'function') {
+        showToast('Live market loader unavailable.');
+        return;
+      }
+      try {
+        await loadPolymarketMarketUniverse({ limit: 2200, pageSize: 500, maxPages: 6 });
+        showToast('Live markets refreshed.');
+        rerenderMarketsTab();
+      } catch {
+        showToast('Refresh failed.');
+      }
+    }
+  });
+
   document.querySelectorAll('.im-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.im-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.im-tab-content').forEach(c => c.classList.remove('active'));
+      const tabName = tab.dataset.tab;
+      if (!tabName) return;
+
+      document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
+      document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
+
       tab.classList.add('active');
-      document.getElementById(`im-tab-${tab.dataset.tab}`).classList.add('active');
-      if (tab.dataset.tab === 'portfolio') {
-        setTimeout(drawPayoffCurve, 50);
+      const content = document.getElementById(`im-tab-${tabName}`);
+      if (!content) return;
+
+      if (tabName === 'portfolio') {
+        content.innerHTML = renderPortfolioTab();
+      } else if (tabName === 'markets') {
+        content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
+      } else if (tabName === 'saved') {
+        content.innerHTML = renderSavedTab();
       }
+
+      content.classList.add('active');
     });
   });
 }
 
-function toggleAgent(id) {
-  const reasoning = document.getElementById(`agent-reasoning-${id}`);
-  const expand = document.getElementById(`agent-expand-${id}`);
-  if (reasoning) {
-    reasoning.classList.toggle('open');
-    expand && expand.classList.toggle('open');
+function rerenderMarketsTab() {
+  const content = document.getElementById('im-tab-markets');
+  if (!content) return;
+  content.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
+}
+
+function rerenderSavedTabIfVisible() {
+  const content = document.getElementById('im-tab-saved');
+  if (!content || !content.classList.contains('active')) return;
+  content.innerHTML = renderSavedTab();
+}
+
+function rerenderPortfolioTabIfVisible() {
+  const content = document.getElementById('im-tab-portfolio');
+  if (!content || !content.classList.contains('active')) return;
+  content.innerHTML = renderPortfolioTab();
+}
+
+function saveMarketForLater(marketId) {
+  if (!marketId) return false;
+  const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
+  if (!market) return false;
+
+  const saved = loadJsonLocalStorage(IM_SAVED_MARKETS_KEY, []);
+  const exists = saved.some(entry => String(entry.marketId) === String(market.id));
+  if (exists) return false;
+
+  saved.push({
+    marketId: String(market.id),
+    question: market.question,
+    savedAt: new Date().toISOString(),
+    savedYesOdds: Number(market.yesOdds) || 0,
+    savedNoOdds: Number(market.noOdds) || 0,
+    savedVolume: market.volume || '$0 Vol'
+  });
+
+  while (saved.length > IM_MAX_SAVED_MARKETS) {
+    saved.shift();
+  }
+
+  storeJsonLocalStorage(IM_SAVED_MARKETS_KEY, saved);
+  return true;
+}
+
+function getSavedMarketsDetailed() {
+  const saved = loadJsonLocalStorage(IM_SAVED_MARKETS_KEY, []);
+
+  return saved
+    .map(entry => {
+      const live = typeof getMarketById === 'function' ? getMarketById(entry.marketId) : null;
+      return {
+        marketId: String(entry.marketId),
+        question: live?.question || entry.question || 'Unknown market',
+        savedAt: entry.savedAt,
+        savedYesOdds: Number(entry.savedYesOdds) || 0,
+        savedNoOdds: Number(entry.savedNoOdds) || 0,
+        savedVolume: entry.savedVolume || '$0 Vol',
+        currentYesOdds: live ? Number(live.yesOdds) : NaN,
+        currentNoOdds: live ? Number(live.noOdds) : NaN,
+        currentVolume: live?.volume || ''
+      };
+    })
+    .reverse();
+}
+
+function recordSidebarBet(marketId, side) {
+  if (!marketId || (side !== 'YES' && side !== 'NO')) return false;
+
+  const market = typeof getMarketById === 'function' ? getMarketById(marketId) : null;
+  if (!market) return false;
+
+  const betLog = loadJsonLocalStorage(IM_BET_LOG_KEY, []);
+  betLog.push({
+    marketId: String(market.id),
+    question: market.question,
+    side,
+    yesOdds: Number(market.yesOdds) || 0,
+    noOdds: Number(market.noOdds) || 0,
+    placedAt: new Date().toISOString()
+  });
+
+  while (betLog.length > IM_MAX_BET_LOG) {
+    betLog.shift();
+  }
+
+  storeJsonLocalStorage(IM_BET_LOG_KEY, betLog);
+  return true;
+}
+
+function getBetLog() {
+  return loadJsonLocalStorage(IM_BET_LOG_KEY, []);
+}
+
+function loadJsonLocalStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
   }
 }
 
-function drawPayoffCurve() {
-  const canvas = document.getElementById('im-payoff-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth || 340;
-  const H = 120;
-  canvas.width = W;
-  canvas.height = H;
-
-  const data = PAYOFF_CURVE_DATA;
-  const maxX = Math.max(...data.map(d => d.x));
-  const maxY = Math.max(...data.map(d => d.y));
-  const pad = { top: 10, right: 10, bottom: 24, left: 32 };
-  const cW = W - pad.left - pad.right;
-  const cH = H - pad.top - pad.bottom;
-
-  // Background
-  ctx.fillStyle = '#1e2330';
-  ctx.fillRect(0, 0, W, H);
-
-  // Grid lines
-  ctx.strokeStyle = '#2a2f3e';
-  ctx.lineWidth = 1;
-  [0, 25, 50, 75, 100].forEach(pct => {
-    const y = pad.top + cH - (pct / 100) * cH;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y);
-    ctx.lineTo(pad.left + cW, y);
-    ctx.stroke();
-    ctx.fillStyle = '#8b92a5';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${pct}%`, pad.left - 4, y + 3);
-  });
-
-  // Axes labels
-  ctx.fillStyle = '#8b92a5';
-  ctx.font = '9px -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ['0', '25', '50', '75', '100'].forEach((label, i) => {
-    const x = pad.left + (i / 4) * cW;
-    ctx.fillText(`$${label}`, x, H - 6);
-  });
-
-  // Gradient fill under curve
-  const toX = d => pad.left + (d.x / maxX) * cW;
-  const toY = d => pad.top + cH - (d.y / maxY) * cH;
-
-  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
-  grad.addColorStop(0, 'rgba(0,200,83,0.3)');
-  grad.addColorStop(1, 'rgba(0,200,83,0.02)');
-
-  ctx.beginPath();
-  ctx.moveTo(toX(data[0]), pad.top + cH);
-  data.forEach(d => ctx.lineTo(toX(d), toY(d)));
-  ctx.lineTo(toX(data[data.length - 1]), pad.top + cH);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  // Curve line
-  ctx.beginPath();
-  ctx.strokeStyle = '#00c853';
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  data.forEach((d, i) => {
-    i === 0 ? ctx.moveTo(toX(d), toY(d)) : ctx.lineTo(toX(d), toY(d));
-  });
-  ctx.stroke();
-
-  // End dot
-  const last = data[data.length - 1];
-  ctx.beginPath();
-  ctx.arc(toX(last), toY(last), 4, 0, Math.PI * 2);
-  ctx.fillStyle = '#00c853';
-  ctx.fill();
+function storeJsonLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Intentionally ignore local storage write failures.
+  }
 }
 
-function showToast(msg) {
+function renderEmptyPanel(title, description) {
+  return `
+    <div class="im-risk-panel">
+      <div class="im-market-title">${escapeHtml(title)}</div>
+      <div style="font-size:12px;color:var(--pm-text-secondary);line-height:1.5;">${escapeHtml(description)}</div>
+    </div>
+  `;
+}
+
+function formatTimestamp(value) {
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts)) return 'just now';
+
+  const diffMs = Date.now() - ts;
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) return 'just now';
+  if (diffMs < hour) return `${Math.max(1, Math.round(diffMs / minute))}m ago`;
+  if (diffMs < day) return `${Math.max(1, Math.round(diffMs / hour))}h ago`;
+
+  return `${Math.max(1, Math.round(diffMs / day))}d ago`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function showToast(message) {
   let toast = document.getElementById('im-toast');
   if (!toast) {
     toast = document.createElement('div');
@@ -506,25 +561,37 @@ function showToast(msg) {
     toast.className = 'im-toast';
     document.body.appendChild(toast);
   }
-  toast.textContent = msg;
+
+  toast.textContent = message;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
 function switchSidebarToMarkets(marketId) {
   const sidebar = document.getElementById('im-sidebar');
-  if (!sidebar) createSidebar();
+  if (!sidebar) {
+    createSidebar();
+  }
 
-  document.querySelectorAll('.im-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.im-tab-content').forEach(c => c.classList.remove('active'));
+  IM_ACTIVE_MARKET_ID = marketId || IM_ACTIVE_MARKET_ID;
+
+  document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
+  document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
 
   const marketsTab = document.querySelector('.im-tab[data-tab="markets"]');
   const marketsContent = document.getElementById('im-tab-markets');
-  if (marketsTab) marketsTab.classList.add('active');
+
+  if (marketsTab) {
+    marketsTab.classList.add('active');
+  }
+
   if (marketsContent) {
     marketsContent.classList.add('active');
-    marketsContent.innerHTML = renderMarketsTab(marketId);
+    marketsContent.innerHTML = renderMarketsTab(IM_ACTIVE_MARKET_ID);
   }
 }
 
 window.setMarketResearch = setMarketResearch;
+window.switchSidebarToMarkets = switchSidebarToMarkets;
+window.saveMarketForLater = saveMarketForLater;
+window.recordSidebarBet = recordSidebarBet;

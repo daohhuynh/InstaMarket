@@ -24,6 +24,9 @@
       "run_at": "document_idle"
     }
   ],
+  "background": {
+    "service_worker": "src/background/worker.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

@@ -40,6 +40,7 @@ Live market matching lives in **`src/content/data.js`**:
 - `loadPolymarketMarketUniverse()` fetches active markets from `gamma-api.polymarket.com`.
 - `findBestMarketForTweet(tweetText)` scores each tweet against the live market universe (no AWS).
 - `buildResearchSummary(...)` feeds the Research card in the sidebar.
+- Cross-origin market fetches are routed through `src/background/worker.js` to avoid `x.com` CORS failures.
 
 ### Bedrock rerank (first 5 tweets per refresh)
 - `findBestMarketForTweetWithAi(tweetText)` uses parser candidates first.
@@ -48,81 +49,31 @@ Live market matching lives in **`src/content/data.js`**:
 - If API is unavailable, it falls back automatically to parser results.
 - Market universe now loads from multiple paginated Polymarket slices (not just a single top-volume page), so niche topics are easier to match.
 
-### `MOCK_MARKETS` → Polymarket API
-```js
-// Fallback only (used if live fetch fails)
-// Primary source is live fetch from:
-// GET https://gamma-api.polymarket.com/markets?active=true&closed=false
-```
+### Live-only data flow
+There are no runtime mock constants in the extension now.
 
-### `MOCK_AGENTS` → AI Swarm Agent outputs
-```js
-// Each agent object maps to one swarm agent result:
-// { id, source, insight: string, reasoning: [{step, text}] }
-// Your agent runner should return this shape per agent
-// insight = one-line summary | reasoning = step-by-step chain
-```
+- Markets are fetched from:
+  `GET https://gamma-api.polymarket.com/markets?active=true&closed=false`
+- Portfolio/Saved data is created from user actions in the extension and stored locally.
+- Ditto modal shows live local activity stats until a real matchmaker backend is connected.
 
-### `MOCK_RISK` → Risk scoring model
-```js
-// { resolution: {value: 0-100, level: 'low'|'med'|'high'}, event: {...}, liquidity: {...} }
-// Feed from your portfolio/risk agent output
-```
-
-### `MOCK_RECOMMENDATION` → Portfolio agent
-```js
-// { action, market, size, hedge, reasoning }
-// Final synthesis from your portfolio management agent
-```
-
-### `MOCK_PORTFOLIO` → User's live portfolio
-```js
-// totalValue, dailyPnl, dailyPnlPct, winRate, avgReturn
-// positions[]: { title, side, stake, pnl, pnlPct, positive }
-// history[]: { title, side, stake, pnl, date, positive }
-// Source: your backend / Polymarket user positions API
-```
-
-### `MOCK_SAVED` → Saved markets store
-```js
-// savedAt, savedOdds, currentOdds, delta, favorable
-// Store in chrome.storage.local, update odds on load
-```
-
-### `MOCK_PERSONAS` → Comment persona simulation
-```js
-// Extracted from tweet reply authors
-// { handle, emoji, portfolioSize, bet, outcome, won, reasoning }
-// Your persona simulation agent fills these
-```
-
-### `DITTO_PROFILES` → Matchmaking service
-```js
-// { name, emoji, color, matchPct, reason }
-// v1: hardcoded | v2: real matching from InstaMarket user database
-```
-
-### Tweet-to-market matching (no API credits)
-The extension now uses an offline text parser in `src/content/data.js`:
+### Tweet-to-market matching
+The extension uses a deterministic parser in `src/content/data.js`:
 - `findBestMarketForTweet(tweetText)` scores every market using phrase + token overlap.
 - `buildResearchSummary(tweetText, match)` builds parser reasoning for the sidebar.
 - `inject.js` adds a `Research` button next to YES/NO/Save and opens parser research in the Markets tab.
 
-No Bedrock calls are required for this matching flow.
+No Bedrock calls are required for this matching flow. Optional Bedrock reranking is still supported for the first 5 tweets per page load.
 
 If you update `manifest.json` host permissions, reload the extension in `chrome://extensions`.
 
-To enable Bedrock reranking for the first 5 tweets, run the Person 2 API:
+If you see `Unable to load live Polymarket markets: TypeError: Failed to fetch`, click **Reload** on the extension once so the background worker is re-registered.
+
+To enable optional Bedrock reranking for the first 5 tweets, run the Person 2 API:
 
 ```bash
 cd ../person2
 npm run match-api
-```
-
-### Payoff curve chart
-`PAYOFF_CURVE_DATA` in `data.js` — replace with real payoff calculation:
-```js
-// [{x: priceIn, y: payout}] — computed from your open positions book
 ```
 
 ---
