@@ -1609,12 +1609,20 @@ function switchSidebarToPortfolio(marketId) {
   }
 
   IM_ACTIVE_MARKET_ID = marketId || IM_ACTIVE_MARKET_ID;
+  const portfolioTab = document.querySelector('.im-tab[data-tab="portfolio"]');
+  const portfolioContent = document.getElementById('im-tab-portfolio');
+  const portfolioAlreadyActive = Boolean(
+    portfolioTab?.classList.contains('active') &&
+    portfolioContent?.classList.contains('active')
+  );
+
+  if (portfolioAlreadyActive && portfolioContent) {
+    portfolioContent.innerHTML = renderPortfolioTab();
+    return;
+  }
 
   document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
   document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
-
-  const portfolioTab = document.querySelector('.im-tab[data-tab="portfolio"]');
-  const portfolioContent = document.getElementById('im-tab-portfolio');
 
   if (portfolioTab) {
     portfolioTab.classList.add('active');

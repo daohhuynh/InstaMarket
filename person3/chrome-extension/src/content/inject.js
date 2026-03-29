@@ -431,10 +431,22 @@
     const context = extractTweetContext(tweet);
     const completedSteps = [];
     let currentStep = 'Initialising research pipeline...';
+    const MAX_LOADING_STEPS = 16;
+    let loadingRenderRaf = 0;
+    let loadingDirty = false;
+    let loadingClosed = false;
 
-    function pushStep(label) {
-      if (!label) return;
-      completedSteps.push(label);
+    function stopLoadingUpdates() {
+      loadingClosed = true;
+      loadingDirty = false;
+      if (loadingRenderRaf) {
+        window.cancelAnimationFrame(loadingRenderRaf);
+        loadingRenderRaf = 0;
+      }
+    }
+
+    function flushLoadingState() {
+      if (loadingClosed) return;
       persistResearch(market.id, {
         type: 'thesis',
         status: 'loading',
@@ -450,71 +462,100 @@
       }
     }
 
-    persistResearch(market.id, {
-      type: 'thesis',
-      status: 'loading',
-      title: `Researching "${market.question}"`,
-      summary: currentStep,
-      completedSteps: [],
-      confidence: 0,
-      matchedTerms: [],
-      steps: []
-    });
-    focusSidebarOnPortfolioForResearch(market.id);
-
-    if (typeof runResearchThesisForTweet !== 'function') {
-      throw new Error('runResearchThesisForTweet helper unavailable');
+    function scheduleLoadingStateFlush() {
+      if (loadingClosed) return;
+      loadingDirty = true;
+      if (loadingRenderRaf) return;
+      loadingRenderRaf = window.requestAnimationFrame(() => {
+        loadingRenderRaf = 0;
+        if (!loadingDirty || loadingClosed) return;
+        loadingDirty = false;
+        flushLoadingState();
+      });
     }
 
-    const response = await runResearchThesisForTweet({
-      tweetText,
-      market,
-      postUrl: context.postUrl,
-      postAuthor: context.postAuthor,
-      postTimestamp: context.postTimestamp,
-      onProgress: (event) => {
-        if (event.type === 'agent_start') {
-          currentStep = event.message;
-        }
-        const label = formatProgressStep(event);
-        if (label) pushStep(label);
+    function pushStep(label) {
+      if (!label) return;
+      const normalized = String(label).trim();
+      if (!normalized) return;
+      if (completedSteps[completedSteps.length - 1] === normalized) return;
+      if (completedSteps.length >= MAX_LOADING_STEPS) {
+        completedSteps.shift();
       }
-    });
-
-    if (!response || typeof response !== 'object' || !response.thesis) {
-      const errorMessage =
-        typeof response?.error === 'string' && response.error
-          ? response.error
-          : 'No thesis payload from backend.';
-      throw new Error(errorMessage);
+      completedSteps.push(normalized);
+      scheduleLoadingStateFlush();
     }
 
-    persistResearch(market.id, {
-      type: 'thesis',
-      status: 'ready',
-      title: market.question,
-      summary: response.thesis.explanation || fallbackResearchSummary.summary,
-      confidence: Number(response.thesis.confidence) || 0,
-      method: response.model_mode === 'bedrock' ? 'Bedrock Nova Lite thesis engine' : 'Heuristic thesis fallback',
-      matchedTerms: [],
-      steps: [
-        `Report ID: ${response.dossier?.report_id || 'n/a'}`,
-        `Sources: x=${response.dossier?.source_counts?.x ?? 0}, youtube=${response.dossier?.source_counts?.youtube ?? 0}, reddit=${response.dossier?.source_counts?.reddit ?? 0}, news=${response.dossier?.source_counts?.news ?? 0}, google=${response.dossier?.source_counts?.google ?? 0}, tiktok=${response.dossier?.source_counts?.tiktok ?? 0}`,
-        ...(Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources.slice(0, 4).map(source => `${source.source_type.toUpperCase()}: ${source.title}`) : [])
-      ],
-      thesis: response.thesis,
-      dossier: {
-        report_id: response.dossier?.report_id || '',
-        is_fallback: Boolean(response.dossier?.is_fallback),
-        source_counts: response.dossier?.source_counts || {},
-        briefing_lines: Array.isArray(response.dossier?.briefing_lines) ? response.dossier.briefing_lines : [],
-        collection_errors: Array.isArray(response.dossier?.collection_errors) ? response.dossier.collection_errors : [],
-        top_sources: Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources : [],
-        all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
-      },
-      showFullData: false
-    });
-    focusSidebarOnPortfolioForResearch(market.id);
+    try {
+      persistResearch(market.id, {
+        type: 'thesis',
+        status: 'loading',
+        title: `Researching "${market.question}"`,
+        summary: currentStep,
+        completedSteps: [],
+        confidence: 0,
+        matchedTerms: [],
+        steps: []
+      });
+      focusSidebarOnPortfolioForResearch(market.id);
+
+      if (typeof runResearchThesisForTweet !== 'function') {
+        throw new Error('runResearchThesisForTweet helper unavailable');
+      }
+
+      const response = await runResearchThesisForTweet({
+        tweetText,
+        market,
+        postUrl: context.postUrl,
+        postAuthor: context.postAuthor,
+        postTimestamp: context.postTimestamp,
+        onProgress: (event) => {
+          if (event.type === 'agent_start') {
+            currentStep = event.message;
+          }
+          const label = formatProgressStep(event);
+          if (label) pushStep(label);
+        }
+      });
+
+      if (!response || typeof response !== 'object' || !response.thesis) {
+        const errorMessage =
+          typeof response?.error === 'string' && response.error
+            ? response.error
+            : 'No thesis payload from backend.';
+        throw new Error(errorMessage);
+      }
+
+      stopLoadingUpdates();
+      persistResearch(market.id, {
+        type: 'thesis',
+        status: 'ready',
+        title: market.question,
+        summary: response.thesis.explanation || fallbackResearchSummary.summary,
+        confidence: Number(response.thesis.confidence) || 0,
+        method: response.model_mode === 'bedrock' ? 'Bedrock Nova Lite thesis engine' : 'Heuristic thesis fallback',
+        matchedTerms: [],
+        steps: [
+          `Report ID: ${response.dossier?.report_id || 'n/a'}`,
+          `Sources: x=${response.dossier?.source_counts?.x ?? 0}, youtube=${response.dossier?.source_counts?.youtube ?? 0}, reddit=${response.dossier?.source_counts?.reddit ?? 0}, news=${response.dossier?.source_counts?.news ?? 0}, google=${response.dossier?.source_counts?.google ?? 0}, tiktok=${response.dossier?.source_counts?.tiktok ?? 0}`,
+          ...(Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources.slice(0, 4).map(source => `${source.source_type.toUpperCase()}: ${source.title}`) : [])
+        ],
+        thesis: response.thesis,
+        dossier: {
+          report_id: response.dossier?.report_id || '',
+          is_fallback: Boolean(response.dossier?.is_fallback),
+          source_counts: response.dossier?.source_counts || {},
+          briefing_lines: Array.isArray(response.dossier?.briefing_lines) ? response.dossier.briefing_lines : [],
+          collection_errors: Array.isArray(response.dossier?.collection_errors) ? response.dossier.collection_errors : [],
+          top_sources: Array.isArray(response.dossier?.top_sources) ? response.dossier.top_sources : [],
+          all_sources: Array.isArray(response.dossier?.all_sources) ? response.dossier.all_sources : []
+        },
+        showFullData: false
+      });
+      focusSidebarOnPortfolioForResearch(market.id);
+    } finally {
+      stopLoadingUpdates();
+    }
   }
 
   function extractTweetContext(tweet) {
