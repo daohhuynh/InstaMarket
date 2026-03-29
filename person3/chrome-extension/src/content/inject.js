@@ -227,7 +227,7 @@
           ]
         });
         showToast('Research failed. See sidebar details.');
-        switchSidebarToMarkets(market.id);
+        focusSidebarOnPortfolioForResearch(market.id);
       });
     });
 
@@ -407,6 +407,17 @@
     }
   }
 
+  function focusSidebarOnPortfolioForResearch(marketId) {
+    if (typeof window.switchSidebarToPortfolio === 'function') {
+      window.switchSidebarToPortfolio(marketId);
+      return;
+    }
+
+    if (typeof switchSidebarToMarkets === 'function') {
+      switchSidebarToMarkets(marketId);
+    }
+  }
+
   function formatProgressStep(event) {
     if (event.type === 'scraper_start') return event.message;
     if (event.type === 'scraper_source') return event.message;
@@ -449,7 +460,7 @@
       matchedTerms: [],
       steps: []
     });
-    switchSidebarToMarkets(market.id);
+    focusSidebarOnPortfolioForResearch(market.id);
 
     if (typeof runResearchThesisForTweet !== 'function') {
       throw new Error('runResearchThesisForTweet helper unavailable');
@@ -503,7 +514,7 @@
       },
       showFullData: false
     });
-    switchSidebarToMarkets(market.id);
+    focusSidebarOnPortfolioForResearch(market.id);
   }
 
   function extractTweetContext(tweet) {

@@ -1602,6 +1602,30 @@ function downloadResearchPdf(marketId) {
   }
 }
 
+function switchSidebarToPortfolio(marketId) {
+  const sidebar = document.getElementById('im-sidebar');
+  if (!sidebar) {
+    createSidebar();
+  }
+
+  IM_ACTIVE_MARKET_ID = marketId || IM_ACTIVE_MARKET_ID;
+
+  document.querySelectorAll('.im-tab').forEach(item => item.classList.remove('active'));
+  document.querySelectorAll('.im-tab-content').forEach(item => item.classList.remove('active'));
+
+  const portfolioTab = document.querySelector('.im-tab[data-tab="portfolio"]');
+  const portfolioContent = document.getElementById('im-tab-portfolio');
+
+  if (portfolioTab) {
+    portfolioTab.classList.add('active');
+  }
+
+  if (portfolioContent) {
+    portfolioContent.classList.add('active');
+    portfolioContent.innerHTML = renderPortfolioTab();
+  }
+}
+
 function switchSidebarToMarkets(marketId) {
   const sidebar = document.getElementById('im-sidebar');
   if (!sidebar) {
@@ -1663,6 +1687,7 @@ function switchSidebarToSaved() {
 
 window.setMarketResearch = setMarketResearch;
 window.rerenderPortfolioTabIfVisible = rerenderPortfolioTabIfVisible;
+window.switchSidebarToPortfolio = switchSidebarToPortfolio;
 window.switchSidebarToMarkets = switchSidebarToMarkets;
 window.setSidebarActiveMarketFromViewport = setSidebarActiveMarketFromViewport;
 window.switchSidebarToSaved = switchSidebarToSaved;
