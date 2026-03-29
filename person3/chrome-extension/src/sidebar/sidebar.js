@@ -50,22 +50,41 @@ function createSidebar() {
 }
 
 function renderPortfolioTab() {
-  const p = MOCK_PORTFOLIO;
-  const pnlPos = p.dailyPnl.startsWith("+");
+  const betLog = getBetLog();
+  if (!betLog.length) {
+    return renderEmptyPanel(
+      "No portfolio data yet",
+      "Place your first YES/NO bet from a tweet card and your activity will appear here.",
+    );
+  }
+
+  const yesCount = betLog.filter((entry) => entry.side === "YES").length;
+  const noCount = betLog.filter((entry) => entry.side === "NO").length;
+  const uniqueMarkets = new Set(betLog.map((entry) => entry.marketId)).size;
+  const recent = [...betLog].slice(-12).reverse();
 
   return `
     <div class="im-portfolio-header">
-      <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Value</div>
-      <div class="im-portfolio-value">${p.totalValue}</div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span class="${pnlPos ? "im-arrow-up" : "im-arrow-down"}"></span>
-        <span style="font-size:14px;font-weight:700;color:${pnlPos ? "var(--pm-green)" : "var(--pm-red)"};">${p.dailyPnl} today</span>
+      <div style="font-size:11px;color:var(--pm-text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Live Portfolio Activity</div>
+      <div class="im-portfolio-value">${betLog.length} Bets</div>
+      <div class="im-portfolio-stats">
+        <div class="im-stat-box">
+          <div class="im-stat-label">YES Bets</div>
+          <div class="im-stat-val green">${yesCount}</div>
+        </div>
+        <div class="im-stat-box">
+          <div class="im-stat-label">NO Bets</div>
+          <div class="im-stat-val red">${noCount}</div>
+        </div>
+        <div class="im-stat-box">
+          <div class="im-stat-label">Markets</div>
+          <div class="im-stat-val">${uniqueMarkets}</div>
+        </div>
       </div>
     </div>
 
-    <button id="im-portfolio-ditto" onclick="toggleDittoModal()" title="Find your trading tribe">
-      <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/132.png" alt="Ditto">
-    </button>
+    <div class="im-section-header">Recent Bets</div>
+    ${recent.map(renderBetRow).join("")}
   `;
 }
 
