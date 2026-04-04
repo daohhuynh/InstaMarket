@@ -1,6 +1,6 @@
 # InstaMarket
 
-InstaMarket is a local, multi-service prediction-market assistant for X/Twitter workflows.
+InstaMarket is a local, multi-service prediction-market assistant for X/News workflows.
 
 It combines:
 * A Chrome extension that detects posts and surfaces related Polymarket markets.
