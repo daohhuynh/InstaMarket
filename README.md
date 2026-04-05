@@ -15,13 +15,13 @@ It combines:
 * **Risk Daemon:** Asynchronous stop-loss monitoring detached from the primary matching thread.
 * **A polyglot prediction-market stack that brings market discovery, AI research, and paper-trade execution directly into content surfaces.** InstaMarket matches live Polymarket data to X/Twitter posts and news articles, generates AI-backed theses via AWS Bedrock (Amazon Nova), simulates crowd flow, and routes paper trades into a custom low-latency C++ CLOB and risk pipeline.
 
-## ⚡ Core Features
+## Core Features
 * **Content-Native Market Matching:** A Manifest V3 Chrome extension scans X/Twitter and Washington Post pages, scoring and injecting live Polymarket candidate markets directly into your feed.
 * **AI Research Thesis Generation:** A 4-agent AWS Bedrock pipeline scrapes cross-platform evidence (X, Reddit, Google News) to output fair probability, catalysts, risk flags, and suggested trade sizing.
 * **Swarm / Persona Trade Simulation:** A Node.js bridge turns social comments into deterministic persona profiles, running risk/portfolio agents to simulate market flow.
 * **Paper Execution & Risk Automation:** Bets are filled by a custom local C++23 order book and monitored by a Supabase-realtime risk daemon for automated stop-loss management.
 
-## 🛠 Tech Stack
+## Tech Stack
 * **Frontend:** Chrome Extension (Manifest V3), React 18 / Vite, Framer Motion
 * **Backend & Orchestration:** Node.js, Express 5, TypeScript/JavaScript microservices
 * **Execution Engine:** Bare-metal C++23 in-memory CLOB (Central Limit Order Book)
