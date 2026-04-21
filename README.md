@@ -123,4 +123,4 @@ cd instamarket-dashboard && npm install && npm run dev
 * **Source collection degraded** — Scraper fell back to deterministic seeds. Check `person2` logs and scraper credentials.
 
 ## Team
-* ** Developed in 24 hours for YHack at Yale University
+Developed in 24 hours for YHack at Yale University
