@@ -121,3 +121,6 @@ cd instamarket-dashboard && npm install && npm run dev
 * **`vite: command not found`** — Run `npm install` inside `instamarket-dashboard/`.
 * **`fatal error: 'vector' file not found` (macOS)** — Use Homebrew GCC (`g++-15`) or repair Xcode Command Line Tools.
 * **Source collection degraded** — Scraper fell back to deterministic seeds. Check `person2` logs and scraper credentials.
+
+## Team
+* ** Developed in 24 hours for YHack at Yale University
